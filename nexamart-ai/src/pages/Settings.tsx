@@ -1,0 +1,261 @@
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { Navbar } from '../components/Navbar';
+import { Footer } from '../components/Footer';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Button } from '../components/ui/button';
+import { Separator } from '../components/ui/separator';
+import { supabase } from '../lib/supabaseClient';
+import { toast } from 'sonner';
+import { motion } from 'motion/react';
+import { Sun, Moon, Bell, Shield } from 'lucide-react';
+
+export function Settings() {
+  const { user, profile } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [phone, setPhone] = useState(profile?.phone || '');
+  const [, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isDark, setIsDark] = useState(true);
+  const [notifications, setNotifications] = useState({
+    email: true,
+    push: true,
+    sms: false,
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name || '');
+      setPhone(profile.phone || '');
+    }
+    const savedTheme = localStorage.getItem('theme');
+    setIsDark(savedTheme !== 'light');
+  }, [profile]);
+
+  const handleProfileUpdate = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: fullName, phone })
+        .eq('id', user?.id);
+
+      if (error) throw error;
+      toast.success('Profile updated successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+      toast.success('Password updated successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+      html.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDark(false);
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDark(true);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <Navbar />
+
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-3xl font-bold mb-6">Settings</h1>
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" />
+                Profile Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={user?.email || ''}
+                  disabled
+                  className="bg-muted border-border opacity-60"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your full name"
+                  className="bg-muted border-border"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone">Phone Number</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+254 7XX XXX XXX"
+                  className="bg-muted border-border"
+                />
+              </div>
+              <Button onClick={handleProfileUpdate} disabled={loading}>
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Separator className="my-6" />
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="bg-muted border-border"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="bg-muted border-border"
+                />
+              </div>
+              <Button onClick={handlePasswordChange} disabled={loading || !newPassword}>
+                {loading ? 'Updating...' : 'Update Password'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Separator className="my-6" />
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-primary" />
+                Notification Preferences
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[
+                { key: 'email', label: 'Email Notifications' },
+                { key: 'push', label: 'Push Notifications' },
+                { key: 'sms', label: 'SMS Notifications' },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="text-sm">{label}</span>
+                  <button
+                    onClick={() =>
+                      setNotifications((prev) => ({
+                        ...prev,
+                        [key]: !prev[key as keyof typeof prev],
+                      }))
+                    }
+                    className={`w-12 h-6 rounded-full transition-colors ${
+                      notifications[key as keyof typeof notifications]
+                        ? 'bg-primary'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                        notifications[key as keyof typeof notifications]
+                          ? 'translate-x-6'
+                          : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Separator className="my-6" />
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isDark ? <Moon className="w-5 h-5 text-primary" /> : <Sun className="w-5 h-5 text-primary" />}
+                Theme Preference
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Dark Mode</span>
+                <button
+                  onClick={toggleTheme}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    isDark ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      isDark ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Current: {isDark ? 'Dark' : 'Light'} mode
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      <Footer />
+    </div>
+  );
+}

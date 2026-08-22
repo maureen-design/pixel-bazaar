@@ -1,0 +1,33 @@
+# Supabase project configuration
+project_id = "jsdynslcjnfdulzgvamj"
+
+# Edge Functions configuration
+[functions.mpesa-stk-push]
+verify_jwt = false
+
+[functions.mpesa-callback]
+verify_jwt = false
+
+[functions.mpesa-reconcile]
+verify_jwt = false
+
+[functions.mpesa-callback-relay]
+verify_jwt = false
+
+[functions.send-order-email]
+verify_jwt = false
+
+[functions.process-card-payment]
+verify_jwt = false
+
+[functions.send-payment-reminder]
+verify_jwt = false
+
+[functions.bank-transfer-reconcile]
+verify_jwt = false
+
+[functions.pay-later-reconcile]
+verify_jwt = false
+
+[functions.ai-assistant]
+verify_jwt = false

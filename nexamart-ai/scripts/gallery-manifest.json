@@ -1,0 +1,36 @@
+{
+  "$comment": "Fill in verified image URLs, then run: node scripts/populate-gallery-images.mjs",
+  "products": [
+    {
+      "slug": "classic-cotton-tshirt",
+      "colors": {
+        "Black": {
+          "images": ["", "", "", ""]
+        },
+        "White": {
+          "images": ["", "", "", ""]
+        },
+        "Navy": {
+          "images": ["", "", "", ""]
+        },
+        "Red": {
+          "images": ["", "", "", ""]
+        }
+      }
+    },
+    {
+      "slug": "premium-hoodie",
+      "colors": {
+        "Black": {
+          "images": ["", "", "", ""]
+        },
+        "Grey": {
+          "images": ["", "", "", ""]
+        },
+        "Olive": {
+          "images": ["", "", "", ""]
+        }
+      }
+    }
+  ]
+}
