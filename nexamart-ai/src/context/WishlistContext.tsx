@@ -12,10 +12,14 @@ interface WishlistItem {
     name: string;
     slug: string;
     price: number;
+    compare_price?: number;
     images: string[];
     rating: number;
     stock_quantity: number;
     vendor_id: string;
+    vendors?: {
+      store_name: string;
+    };
   };
 }
 
@@ -55,10 +59,14 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
             name,
             slug,
             price,
+            compare_price,
             images,
             rating,
             stock_quantity,
-            vendor_id
+            vendor_id,
+            vendors (
+              store_name
+            )
           )
         `)
         .eq('user_id', user.id);
@@ -101,6 +109,9 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromWishlist = async (productId: string) => {
+    const removed = wishlistItems.find(item => item.product_id === productId);
+    setWishlistItems(prev => prev.filter(item => item.product_id !== productId));
+
     try {
       const { error } = await supabase
         .from('wishlist_items')
@@ -109,10 +120,19 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         .eq('product_id', productId);
 
       if (error) throw error;
-
-      await fetchWishlist();
-      toast.success('Removed from wishlist!');
+      toast.success('Removed from wishlist', {
+        action: removed ? {
+          label: 'Undo',
+          onClick: async () => {
+            await supabase
+              .from('wishlist_items')
+              .insert({ user_id: user?.id, product_id: productId });
+            await fetchWishlist();
+          },
+        } : undefined,
+      });
     } catch (error: any) {
+      if (removed) setWishlistItems(prev => [...prev, removed]);
       toast.error(error.message || 'Failed to remove from wishlist');
     }
   };

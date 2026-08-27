@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Zap, Shield, ShoppingBag } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Zap, Shield, ShoppingCart } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { createOrder, type ShippingAddress } from '../utils/orderUtils';
 import { DeliveryMethodSelector, type DeliveryMethod } from '../components/checkout/DeliveryMethodSelector';
-import { OrderReview } from '../components/checkout/OrderReview';
 import { CardPaymentForm } from '../components/checkout/CardPaymentForm';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { KENYA_COUNTIES, getTownsForCounty } from '../data/kenya-counties';
@@ -20,8 +19,9 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import { SafeImg } from '../components/SafeImg';
 
-const STEPS = ['Shipping', 'Review', 'Payment'] as const;
+const STEPS = ['Shipping', 'Payment'] as const;
 type Step = (typeof STEPS)[number];
 
 function isValidKenyanPhone(value: string): boolean {
@@ -45,7 +45,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 
 export function Checkout() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { cartItems, cartTotal, clearCart } = useCart();
   const { settings, loading: settingsLoading } = useSettings();
   const [loading, setLoading] = useState(false);
@@ -69,9 +69,8 @@ export function Checkout() {
   const [errors, setErrors] = useState<Partial<ShippingAddress>>({});
 
   const [orderCreated, setOrderCreated] = useState<any>(null);
-  const [mpesaPhone, setMpesaPhone] = useState('');
+  const [mpesaPhone, setMpesaPhone] = useState(profile?.phone || '');
   const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error' | 'cancelled' | 'failed' | 'pending'>('idle');
-  const [, setMpesaCheckoutId] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -177,7 +176,7 @@ export function Checkout() {
   const removeCoupon = () => { setAppliedCoupon(null); setCouponCode(''); setCouponError(''); };
 
   const goToStep = (s: Step) => {
-    if (s === 'Review') {
+    if (s === 'Payment') {
       const errs = validateForm();
       if (Object.keys(errs).length > 0) {
         focusFirstInvalid(errs);
@@ -236,29 +235,8 @@ export function Checkout() {
 
       if (isDeferred) {
         try {
-          let vendorEmail = null;
-          if (order?.vendor_id) {
-            const { data: vendorData } = await supabase.from('vendors').select('profiles(email)').eq('id', order.vendor_id).single();
-            const profile = Array.isArray(vendorData?.profiles) ? vendorData.profiles[0] : vendorData?.profiles;
-            vendorEmail = profile?.email || null;
-          }
-
           await supabase.functions.invoke('send-order-email', {
-            body: {
-              order: {
-                id: order.id, order_number: order.order_number, total_amount: order.total_amount,
-                shipping_cost: order.shipping_cost || 0, tax_amount: order.tax_amount || 0,
-                shipping_address: order.shipping_address, payment_method: order.payment_method || selectedPayment,
-                created_at: order.created_at || new Date().toISOString(),
-                payment_type: order.payment_type || paymentType,
-                payment_deadline: order.payment_deadline || null,
-                payment_status: order.payment_status || 'pending',
-              },
-              customer: { email: user.email, full_name: formData.full_name },
-              items: cartItems.map(item => ({ product_name: item.products?.name || 'Product', quantity: item.quantity, total_price: (item.variant_price || item.products?.price || 0) * item.quantity })),
-              vendor: { store_email: vendorEmail },
-              site: { name: settings.siteName, tax_rate: settings.taxRate },
-            },
+            body: { order_id: order.id },
           });
         } catch { toast.warning('Order placed, but email confirmation could not be sent.'); }
 
@@ -298,7 +276,6 @@ export function Checkout() {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
-      setMpesaCheckoutId(data.checkoutRequestId);
       setMpesaStatus('sent');
       setResendCooldown(15);
       toast.success('Payment request sent. Check your phone to complete payment.');
@@ -560,7 +537,6 @@ export function Checkout() {
               amount={orderCreated.total_amount}
               orderId={orderCreated.id}
               formatPrice={formatPrice}
-              onSuccess={async () => { await clearCart(); toast.success('Payment successful!'); setTimeout(() => navigate(`/order-confirmation/${orderCreated.id}`), 1000); }}
               onBack={() => { setOrderCreated(null); }}
             />
           </motion.div>
@@ -686,32 +662,13 @@ export function Checkout() {
                   <DeliveryMethodSelector value={deliveryMethod} onChange={setDeliveryMethod} county={formData.county} settings={settings} />
                 </div>
 
-                <Button onClick={() => goToStep('Review')} className="w-full py-4 text-lg gap-2">
-                  Continue to Review <ArrowRight className="w-5 h-5" />
+                <Button onClick={() => goToStep('Payment')} className="w-full py-4 text-lg gap-2">
+                  Continue to Payment <ArrowRight className="w-5 h-5" />
                 </Button>
               </div>
             )}
 
-            {/* Step 2: Review */}
-            {step === 'Review' && (
-              <div className="space-y-6">
-                <div className="bg-card rounded-xl p-6 border border-border">
-                  <h2 className="text-xl font-semibold mb-6">Review Your Order</h2>
-                  <OrderReview items={cartItems} formData={formData} deliveryMethod={deliveryMethod} formatPrice={formatPrice} settings={settings} />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setStep('Shipping')} className="flex-1 gap-2">
-                    <ArrowLeft className="w-5 h-5" /> Back
-                  </Button>
-                  <Button onClick={() => goToStep('Payment')} className="flex-1 gap-2">
-                    Continue to Payment <ArrowRight className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Payment */}
+            {/* Step 2: Payment */}
             {step === 'Payment' && (
               <div className="space-y-6">
                 <div className="bg-card rounded-xl p-6 border border-border">
@@ -804,14 +761,14 @@ export function Checkout() {
                 )}
 
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setStep('Review')} className="flex-1 gap-2">
-                    <ArrowLeft className="w-5 h-5" /> Back
+                  <Button variant="outline" onClick={() => setStep('Shipping')} className="flex-1 gap-2">
+                    <ArrowLeft className="w-5 h-5" /> Back to Shipping
                   </Button>
                   <Button onClick={handlePlaceOrder} className="flex-1 gap-2" disabled={loading || settingsLoading}>
                     {loading ? (
                       <><Loader2 className="w-5 h-5 animate-spin" /> Creating Order...</>
                     ) : (
-                      <><ShoppingBag className="w-5 h-5" /> Place Order</>
+                      <><ShoppingCart className="w-5 h-5" /> Place Order</>
                     )}
                   </Button>
                 </div>
@@ -822,7 +779,12 @@ export function Checkout() {
           {/* Order Summary Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-card rounded-xl p-6 border border-border sticky top-24">
-              <h2 className="text-xl font-semibold mb-6">Order Summary</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Order Summary</h2>
+                <Link to="/cart" className="text-sm text-primary hover:text-primary/80 transition-colors">
+                  Edit Cart
+                </Link>
+              </div>
 
               <div className="mb-6 p-3 bg-muted rounded-lg border border-border">
                 {appliedCoupon ? (
@@ -850,7 +812,7 @@ export function Checkout() {
                   <div key={item.id} className="flex gap-3">
                     <div className="w-16 h-16 bg-muted rounded-lg overflow-hidden flex-shrink-0">
                       {item.products?.images && item.products.images[0] && (
-                        <img src={item.products.images[0]} alt={item.products.name} className="w-full h-full object-cover" />
+                        <SafeImg src={item.products.images[0]} alt={item.products.name} className="w-full h-full object-cover" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

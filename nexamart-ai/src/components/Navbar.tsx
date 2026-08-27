@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles } from 'lucide-react';
+import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { AISearchBar } from './AISearchBar';
 import { ShoppingAssistantModal } from './ai/ShoppingAssistantModal';
 import { Button } from './ui/button';
+import { Monogram } from './Monogram';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +31,7 @@ export function Navbar() {
   const [isDark, setIsDark] = useState(true);
   const [isAIOpen, setIsAIOpen] = useState(false);
   const { user, signOut, isVendor, isAdmin } = useAuth();
-  const { cartItems, cartCount, cartTotal } = useCart();
+  const { cartItems, cartCount, cartTotal, removeFromCart } = useCart();
   const { wishlistCount } = useWishlist();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -76,9 +77,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-brand to-brand-dark rounded-lg flex items-center justify-center">
-              <ShoppingCart className="w-5 h-5 text-white" />
-            </div>
+            <Monogram />
             <span className="text-xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
               {settings.siteName}
             </span>
@@ -133,7 +132,7 @@ export function Navbar() {
                   >
                     <ShoppingCart aria-hidden="true" className="w-6 h-6" />
                     {cartCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                      <span key={cartCount} className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center animate-bounce">
                         {cartCount}
                       </span>
                     )}
@@ -146,14 +145,26 @@ export function Navbar() {
                 </SheetHeader>
                 <div className="flex-1 overflow-y-auto py-4">
                   {cartItems.length === 0 ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-8 px-4">
                       <ShoppingCart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">Your cart is empty</p>
+                      <p className="text-foreground font-medium mb-1">Your cart is empty</p>
+                      <p className="text-muted-foreground text-sm mb-4">
+                        {user
+                          ? "You haven't added any items yet."
+                          : 'Explore the marketplace and find something you love.'}
+                      </p>
+                      <Link
+                        to="/"
+                        onClick={() => setIsCartOpen(false)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/80 transition-colors"
+                      >
+                        Start Shopping
+                      </Link>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {cartItems.slice(0, 3).map((item) => (
-                        <div key={item.id} className="flex gap-3">
+                        <div key={item.id} className="flex gap-3 px-4">
                           <div className="w-16 h-16 bg-muted rounded-lg overflow-hidden flex-shrink-0">
                             {item.products?.images && item.products.images[0] && (
                               <img
@@ -164,20 +175,31 @@ export function Navbar() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-foreground font-medium text-sm truncate">
-                              {item.products?.name}
-                            </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-foreground font-medium text-sm truncate">
+                                {item.products?.name}
+                              </p>
+                              <button
+                                onClick={() => removeFromCart(item.id)}
+                                className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 p-0.5"
+                                aria-label={`Remove ${item.products?.name || 'item'} from cart`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                             {item.variant_attributes && (
                               <p className="text-muted-foreground text-xs">
                                 {Object.values(item.variant_attributes).join(', ')}
                               </p>
                             )}
-                            <p className="text-muted-foreground text-sm">
-                              Qty: {item.quantity}
-                            </p>
-                            <p className="text-primary font-semibold text-sm">
-                              {formatPrice((item.variant_price || item.products?.price || 0) * item.quantity)}
-                            </p>
+                            <div className="flex items-center justify-between mt-1">
+                              <p className="text-muted-foreground text-sm">
+                                Qty: {item.quantity}
+                              </p>
+                              <p className="text-primary font-semibold text-sm">
+                                {formatPrice((item.variant_price || item.products?.price || 0) * item.quantity)}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -188,19 +210,23 @@ export function Navbar() {
                       )}
                     </div>
                   )}
-                  <Separator />
-                  <div className="space-y-3 p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Subtotal</span>
-                      <span className="text-foreground font-semibold">{formatPrice(cartTotal)}</span>
-                    </div>
-                    <Button variant="outline" className="w-full" onClick={() => { navigate('/cart'); setIsCartOpen(false); }}>
-                      View Cart
-                    </Button>
-                    <Button className="w-full" onClick={() => { navigate('/checkout'); setIsCartOpen(false); }}>
-                      Proceed to Checkout
-                    </Button>
-                  </div>
+                  {cartItems.length > 0 && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3 p-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="text-foreground font-semibold">{formatPrice(cartTotal)}</span>
+                        </div>
+                        <Button variant="outline" className="w-full" onClick={() => { navigate('/cart'); setIsCartOpen(false); }}>
+                          View Cart
+                        </Button>
+                        <Button className="w-full" onClick={() => { navigate(user ? '/checkout' : '/login?next=/checkout'); setIsCartOpen(false); }}>
+                          {user ? 'Proceed to Checkout' : 'Sign In to Checkout'}
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>

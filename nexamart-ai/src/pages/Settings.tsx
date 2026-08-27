@@ -17,9 +17,10 @@ export function Settings() {
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
-  const [, setCurrentPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPw, setChangingPw] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [notifications, setNotifications] = useState({
     email: true,
@@ -54,6 +55,10 @@ export function Settings() {
   };
 
   const handlePasswordChange = async () => {
+    if (!currentPassword) {
+      toast.error('Please enter your current password');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
@@ -62,8 +67,17 @@ export function Settings() {
       toast.error('Password must be at least 6 characters');
       return;
     }
-    setLoading(true);
+    setChangingPw(true);
     try {
+      // Re-authenticate with current password first
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: currentPassword,
+      });
+      if (authError) {
+        toast.error('Current password is incorrect');
+        return;
+      }
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -75,7 +89,7 @@ export function Settings() {
     } catch (error: any) {
       toast.error(error.message || 'Failed to update password');
     } finally {
-      setLoading(false);
+      setChangingPw(false);
     }
   };
 
@@ -152,6 +166,17 @@ export function Settings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="bg-muted border-border"
+                />
+              </div>
+              <div>
                 <Label htmlFor="newPassword">New Password</Label>
                 <Input
                   id="newPassword"
@@ -173,8 +198,8 @@ export function Settings() {
                   className="bg-muted border-border"
                 />
               </div>
-              <Button onClick={handlePasswordChange} disabled={loading || !newPassword}>
-                {loading ? 'Updating...' : 'Update Password'}
+              <Button onClick={handlePasswordChange} disabled={changingPw || !currentPassword || !newPassword}>
+                {changingPw ? 'Updating...' : 'Update Password'}
               </Button>
             </CardContent>
           </Card>

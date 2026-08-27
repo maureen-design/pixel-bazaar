@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Search, FolderOpen } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Pagination } from '../../components/ui/pagination';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { CategoryIcon, CATEGORY_ICON_OPTIONS } from '../../utils/categoryIcons';
+
+const PAGE_SIZE = 15;
 
 export function AdminCategories() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -18,6 +22,8 @@ export function AdminCategories() {
   const [editing, setEditing] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [form, setForm] = useState({ name: '', slug: '', icon: '', description: '' });
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => { fetchCategories(); }, []);
 
@@ -36,6 +42,26 @@ export function AdminCategories() {
       setLoading(false);
     }
   };
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return categories;
+    return categories.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categories, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const openEdit = (cat: any) => {
     setForm({ name: cat.name, slug: cat.slug, icon: cat.icon || '', description: cat.description || '' });
@@ -94,11 +120,44 @@ export function AdminCategories() {
         <Button onClick={openCreate} className="gap-2"><Plus className="w-4 h-4" /> Add Category</Button>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search categories..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <Card className="bg-card border-border overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" /></div>
-        ) : categories.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">No categories yet</div>
+          <div className="p-4 space-y-0">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-4 border-b border-border last:border-b-0">
+                <Skeleton className="h-9 w-9 rounded-lg" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24 ml-auto" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-16 ml-auto" />
+                <div className="flex gap-1 ml-2">
+                  <Skeleton className="h-8 w-8 rounded" />
+                  <Skeleton className="h-8 w-8 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
+            <p className="text-sm font-medium">{search ? 'No categories match your search' : 'No categories yet'}</p>
+            {!search && (
+              <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={openCreate}>
+                <Plus className="w-4 h-4" /> Create your first category
+              </Button>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -112,8 +171,8 @@ export function AdminCategories() {
                   <th className="text-right p-4 text-muted-foreground font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
-                {categories.map((cat) => (
+              <tbody className="divide-y divide-border">
+                {paginated.map((cat) => (
                   <motion.tr key={cat.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-muted/50">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -142,6 +201,10 @@ export function AdminCategories() {
           </div>
         )}
       </Card>
+
+      {!loading && filtered.length > 0 && (
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent>

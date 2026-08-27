@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Save, Settings as SettingsIcon, Plus, Trash2, Info } from 'lucide-react';
+import { Save, Settings as SettingsIcon, Plus, Trash2, Info, Lock } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
 import { toast } from 'sonner';
 import { getSettings, updateSettings, invalidateSettings, type PlatformSettings } from '../../lib/settings';
+import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 interface SurchargeRow {
   county: string;
@@ -110,6 +112,7 @@ function buildPayload(draft: Draft): Partial<PlatformSettings> {
 }
 
 export function AdminSettings() {
+  const { user } = useAuth();
   const [saved, setSaved] = useState<PlatformSettings | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -194,6 +197,50 @@ export function AdminSettings() {
 
   const handleReset = () => {
     setDraft(settingsToDraft(saved));
+  };
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPw, setChangingPw] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword) {
+      toast.error('Please fill in all password fields');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    setChangingPw(true);
+    try {
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: currentPassword,
+      });
+      if (signInErr) {
+        toast.error('Current password is incorrect');
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        toast.error(error.message || 'Failed to change password');
+        return;
+      }
+      toast.success('Password changed successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch {
+      toast.error('Failed to change password');
+    } finally {
+      setChangingPw(false);
+    }
   };
 
   return (
@@ -310,9 +357,9 @@ export function AdminSettings() {
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
-              <p className="font-medium text-sm">Credit / Debit Card</p>
+              <p className="font-medium text-sm">Credit / Debit Card (Paystack)</p>
               <p className="text-xs text-muted-foreground">
-                Card checkout currently uses a simulated gateway. Disabling rejects new card orders server-side.
+                Customers pay via Paystack card checkout. Disabling rejects new card orders server-side.
               </p>
             </div>
             <Switch id="card-enabled" checked={draft.cardEnabled} onCheckedChange={(v) => set('cardEnabled', v)} aria-label="Toggle card payments" />
@@ -371,6 +418,42 @@ export function AdminSettings() {
           <p className="text-sm text-muted-foreground">
             Orders not paid within this window are automatically cancelled and stock is released. Default: 72 hours.
           </p>
+        </div>
+      </section>
+
+      {/* Account Security */}
+      <section className="bg-card rounded-xl p-6 border border-border max-w-2xl">
+        <div className="flex items-center gap-3 mb-5">
+          <Lock className="w-5 h-5 text-primary" />
+          <h2 className="text-xl font-semibold">Account Security</h2>
+        </div>
+        <div className="space-y-4">
+          <Input
+            label="Current Password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Enter your current password"
+          />
+          <Input
+            label="New Password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="At least 6 characters"
+            error={newPassword.length > 0 && newPassword.length < 6 ? 'Must be at least 6 characters' : undefined}
+          />
+          <Input
+            label="Confirm New Password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter new password"
+            error={confirmPassword.length > 0 && confirmPassword !== newPassword ? 'Passwords do not match' : undefined}
+          />
+          <Button onClick={handleChangePassword} disabled={changingPw || !currentPassword || !newPassword || !confirmPassword} className="gap-2">
+            <Lock className="w-4 h-4" /> {changingPw ? 'Changing...' : 'Change Password'}
+          </Button>
         </div>
       </section>
     </div>

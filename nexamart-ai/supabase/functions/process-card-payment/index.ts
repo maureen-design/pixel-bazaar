@@ -1,15 +1,17 @@
+// DEPRECATED: Card payments now run through Paystack's hosted checkout
+// (create-paystack-checkout + paystack-webhook). The frontend no longer
+// invokes this function; it is kept temporarily as a rollback path and should
+// be deleted once the Paystack flow is verified end-to-end.
+//
+// LEGACY SIMULATION: the outcome below was decided by Math.random() and any
+// submitted card data was discarded unread — do not re-enable.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-client-info, apikey',
-  'Access-Control-Max-Age': '86400',
-};
+const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const jsonResponse = (status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 
 // Best-effort order confirmation email (same contract as mpesa-callback). Never
 // throws: the payment state has already been committed, so an email failure must
@@ -51,7 +53,7 @@ async function sendConfirmationEmail(orderId: string): Promise<void> {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders });
+    return new Response('ok', { status: 200, headers: jsonHeaders });
   }
 
   try {

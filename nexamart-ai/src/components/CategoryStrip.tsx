@@ -66,7 +66,7 @@ export function CategoryStrip({ selectedCategory, onCategorySelect, counts }: Ca
           </button>
           <Link
             to={`/search?category=${category.id}`}
-            className="text-xs text-primary hover:text-primary/80 hover:underline whitespace-nowrap pr-2"
+            className="text-xs font-medium text-primary hover:text-primary/80 hover:underline whitespace-nowrap px-2 py-2 -mr-1"
           >
             See All
           </Link>

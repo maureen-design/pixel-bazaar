@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { VendorProtectedRoute } from './components/VendorProtectedRoute';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
@@ -23,12 +24,19 @@ import { VendorDashboard } from './pages/vendor/Dashboard';
 import { VendorProducts } from './pages/vendor/Products';
 import { VendorOrders } from './pages/vendor/Orders';
 import { VendorAnalytics } from './pages/vendor/Analytics';
+import { VendorSettings } from './pages/vendor/Settings';
 import { Profile } from './pages/Profile';
 import { Orders } from './pages/Orders';
 import { Wishlist } from './pages/Wishlist';
 import { Search } from './pages/Search';
 import { Settings } from './pages/Settings';
 import { Compare } from './pages/Compare';
+import { About } from './pages/About';
+import { Contact } from './pages/Contact';
+import { Privacy } from './pages/Privacy';
+import { Terms } from './pages/Terms';
+import { NotFound } from './pages/NotFound';
+import { ScrollToTop } from './components/ScrollToTop';
 import { AdminLayout } from './pages/admin/Layout';
 import { AdminDashboard } from './pages/admin/Dashboard';
 import { AdminVendors } from './pages/admin/Vendors';
@@ -63,11 +71,13 @@ function SiteIdentity() {
 
 function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
           <WishlistProvider>
           <SiteIdentity />
+          <ScrollToTop />
           <Toaster position="top-right" richColors />
           <a
             href="#main-content"
@@ -89,6 +99,10 @@ function App() {
             <Route path="/compare" element={<Compare />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
@@ -120,16 +134,18 @@ function App() {
                   <Route path="products" element={<VendorProducts />} />
                   <Route path="orders" element={<VendorOrders />} />
                   <Route path="analytics" element={<VendorAnalytics />} />
+                  <Route path="settings" element={<VendorSettings />} />
                 </Route>
               </Route>
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           </main>
           </WishlistProvider>
         </CartProvider>
         </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

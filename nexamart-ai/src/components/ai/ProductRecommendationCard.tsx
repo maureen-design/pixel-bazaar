@@ -2,6 +2,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Check, X, ArrowRight, ShoppingCart, BadgeCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useCart } from '../../context/CartContext';
+import { SafeImg } from '../SafeImg';
 import type { ProductVariants } from '../../types';
 
 export interface Recommendation {
@@ -57,7 +58,7 @@ export function ProductRecommendationCard({ recommendation, index }: ProductReco
             aria-label={`View ${product.name}`}
           >
             {product.images?.[0] && (
-              <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+              <SafeImg src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
             )}
           </Link>
           <div className="flex-1 min-w-0">

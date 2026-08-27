@@ -51,6 +51,17 @@ serve(async (req) => {
     return new Response('ok', { status: 200, headers: jsonHeaders });
   }
 
+  // Accept service_role Bearer token (from pg_cron) OR x-cron-secret header
+  const authHeader = req.headers.get('Authorization') || '';
+  const cronSecret = Deno.env.get('CRON_SECRET') || '';
+  const providedSecret = req.headers.get('x-cron-secret') || '';
+  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const isServiceRole = authHeader === `Bearer ${serviceRole}`;
+  const isCron = cronSecret && providedSecret === cronSecret;
+  if (!isServiceRole && !isCron) {
+    return jsonResponse(403, { success: false, error: 'Unauthorized' });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';

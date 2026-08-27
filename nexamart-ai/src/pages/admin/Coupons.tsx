@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Tag, Tags } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Pagination } from '../../components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
@@ -12,11 +14,14 @@ import { motion } from 'motion/react';
 import { logActivity } from '../../utils/activityLogger';
 import { useAuth } from '../../context/AuthContext';
 
+const PAGE_SIZE = 15;
+
 export function AdminCoupons() {
   const { user, profile } = useAuth();
   const [coupons, setCoupons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -95,7 +100,11 @@ export function AdminCoupons() {
   };
 
   const filtered = coupons.filter((c) => c.code?.toLowerCase().includes(search.toLowerCase()) || c.description?.toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString() : '-';
+
+  useEffect(() => { setPage(1); }, [search]);
 
   return (
     <div className="space-y-6">
@@ -113,9 +122,33 @@ export function AdminCoupons() {
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
-        {loading ? <div className="p-8 text-center"><div className="h-8 w-8 animate-spin mx-auto border-4 border-primary border-t-transparent rounded-full" /></div>
-        : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground">No coupons found</div>
-        : <div className="overflow-x-auto">
+        {loading ? (
+          <div className="p-4 space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-4">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-16" />
+                <div className="ml-auto flex gap-2">
+                  <Skeleton className="h-8 w-8 rounded" />
+                  <Skeleton className="h-8 w-8 rounded" />
+                  <Skeleton className="h-8 w-8 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Tags className="w-12 h-12 mb-4 opacity-40" />
+            <p className="text-lg font-medium">No coupons found</p>
+            <p className="text-sm mt-1">{search ? 'Try a different search term' : 'Create your first coupon to get started'}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -128,8 +161,8 @@ export function AdminCoupons() {
                   <th className="text-right p-4 text-muted-foreground font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
-                {filtered.map((c) => {
+              <tbody className="divide-y divide-border">
+                {paginated.map((c) => {
                   const expired = c.expires_at && new Date(c.expires_at) < new Date();
                   return (
                     <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-muted/50">
@@ -165,8 +198,13 @@ export function AdminCoupons() {
                 })}
               </tbody>
             </table>
-          </div>}
+          </div>
+        )}
       </Card>
+
+      {!loading && filtered.length > 0 && (
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-lg">

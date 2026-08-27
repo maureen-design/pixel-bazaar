@@ -6,6 +6,7 @@ import { AddToCartButton } from './AddToCartButton';
 import { WishlistButton } from './WishlistButton';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { SafeImg } from './SafeImg';
 
 interface ProductCardProps {
   product: Product;
@@ -21,16 +22,26 @@ export function ProductCard({ product }: ProductCardProps) {
     }).format(price);
   };
 
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days}d ago`;
+    if (days < 30) return `${Math.floor(days / 7)}w ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  };
+
   const renderStars = (rating: number) => {
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
 
     for (let i = 0; i < fullStars; i++) {
-      stars.push(<Star key={i} className="w-4 h-4 fill-yellow-400 text-warning" />);
+      stars.push(<Star key={i} className="w-4 h-4 fill-warning text-warning" />);
     }
     if (hasHalfStar) {
-      stars.push(<StarHalf key="half" className="w-4 h-4 fill-yellow-400 text-warning" />);
+      stars.push(<StarHalf key="half" className="w-4 h-4 fill-warning text-warning" />);
     }
     const emptyStars = 5 - Math.ceil(rating);
     for (let i = 0; i < emptyStars; i++) {
@@ -48,6 +59,11 @@ export function ProductCard({ product }: ProductCardProps) {
       ? !product.variants?.combinations?.some((c) => (c.stock || 0) > 0)
       : product.stock_quantity === 0);
 
+  const discountPercent =
+    product.compare_price && product.compare_price > product.price
+      ? Math.round(((product.compare_price - product.price) / product.compare_price) * 100)
+      : 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -59,8 +75,8 @@ export function ProductCard({ product }: ProductCardProps) {
         className="group bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all motion-spring block"
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
-          <img
-            src={product.images[0]}
+          <SafeImg
+            src={product.images?.[0]}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
@@ -72,9 +88,11 @@ export function ProductCard({ product }: ProductCardProps) {
               </Badge>
             </div>
           )}
-          {product.compare_price && product.compare_price > product.price && (
+          {discountPercent > 0 && (
             <div className="absolute top-2 left-2">
-              <Badge variant="destructive">Sale</Badge>
+              <Badge variant="destructive" className="text-xs font-bold">
+                -{discountPercent}%
+              </Badge>
             </div>
           )}
           {hasVariants && (
@@ -96,6 +114,7 @@ export function ProductCard({ product }: ProductCardProps) {
           
           <p className="text-muted-foreground text-sm mb-2">
             {product.vendor?.store_name}
+            <span className="text-muted-foreground/60 ml-2">{timeAgo(product.created_at)}</span>
           </p>
           
           <div className="flex items-center gap-1 mb-3">
@@ -116,7 +135,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           </div>
           
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100">
             {hasVariants ? (
               <Button
                 variant="default"

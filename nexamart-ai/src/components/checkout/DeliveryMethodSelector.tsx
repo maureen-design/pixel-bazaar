@@ -9,12 +9,27 @@ import {
 
 export type { DeliveryMethod } from '../../lib/settings';
 
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    if (result.getDay() !== 0 && result.getDay() !== 6) added++;
+  }
+  return result;
+}
+
+function formatDateShort(date: Date): string {
+  return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+}
+
 interface DeliveryOption {
   id: DeliveryMethod;
   label: string;
   description: string;
   icon: typeof Truck;
   eta: string;
+  dateRange: string;
   enabled: boolean;
 }
 
@@ -30,11 +45,30 @@ export function DeliveryMethodSelector({
   settings: PlatformSettings;
 }) {
   const surcharge = county ? getCountySurcharge(county, settings) : 0;
+  const today = new Date();
+
+  const getStandardDateRange = () => {
+    const from = addBusinessDays(today, 3);
+    const to = addBusinessDays(today, 5);
+    return `${formatDateShort(from)} - ${formatDateShort(to)}`;
+  };
+
+  const getExpressDateRange = () => {
+    const from = addBusinessDays(today, 1);
+    const to = addBusinessDays(today, 2);
+    return `${formatDateShort(from)} - ${formatDateShort(to)}`;
+  };
+
+  const getPickupDateRange = () => {
+    const from = addBusinessDays(today, 1);
+    const to = addBusinessDays(today, 2);
+    return `Ready by ${formatDateShort(from)} - ${formatDateShort(to)}`;
+  };
 
   const options: DeliveryOption[] = [
-    { id: 'standard', label: 'Standard Delivery', description: 'Delivered to your doorstep', icon: Truck, eta: '2-4 days', enabled: true },
-    { id: 'express', label: 'Express Delivery', description: 'Fast-tracked delivery', icon: Zap, eta: 'Same day', enabled: settings.expressEnabled },
-    { id: 'pickup', label: 'Pickup', description: 'Pick up from our location', icon: Store, eta: '1-2 days', enabled: settings.pickupEnabled },
+    { id: 'standard', label: 'Standard Delivery', description: 'Delivered to your doorstep', icon: Truck, eta: '3-5 business days', dateRange: getStandardDateRange(), enabled: true },
+    { id: 'express', label: 'Express Delivery', description: 'Fast-tracked delivery', icon: Zap, eta: '1-2 business days', dateRange: getExpressDateRange(), enabled: settings.expressEnabled },
+    { id: 'pickup', label: 'Pickup', description: 'Pick up from our location', icon: Store, eta: '1-2 business days', dateRange: getPickupDateRange(), enabled: settings.pickupEnabled },
   ];
 
   const visible = options.filter((opt) => opt.enabled);
@@ -61,7 +95,7 @@ export function DeliveryMethodSelector({
             <div className="flex-1">
               <p className="font-medium">{opt.label}</p>
               <p className="text-sm text-muted-foreground">{opt.description}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">ETA: {opt.eta}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{opt.eta} — arriving {opt.dateRange}</p>
             </div>
             <div className="text-right">
               <p className="font-semibold">{total === 0 ? 'Free' : formatPrice(total)}</p>

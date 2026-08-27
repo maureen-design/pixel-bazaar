@@ -460,32 +460,28 @@ serve(async (req) => {
     let customer: any;
     let items: any[];
     let vendor: any;
-    let isOrderIdPath = false;
 
-    if (body?.order_id && !body?.order) {
-      // Server-side path (M-Pesa callback / reconciliation). Data is read from
-      // the database, never trusted from the caller.
-      isOrderIdPath = true;
-      const fetched = await fetchOrderData(supabase, body.order_id);
-      order = fetched.order;
-      customer = fetched.customer;
-      items = fetched.items;
-      vendor = fetched.vendor;
+    if (!body?.order_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'order_id is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-      // Idempotency guard: a previously confirmed order must not be emailed
-      // again (duplicate callback / reconcile race).
-      if (order.email_sent) {
-        console.log(`Order ${order.id} already emailed; skipping duplicate`);
-        return new Response(
-          JSON.stringify({ success: true, skipped: true }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    } else {
-      order = body?.order;
-      customer = body?.customer;
-      items = body?.items ?? [];
-      vendor = body?.vendor ?? {};
+    const fetched = await fetchOrderData(supabase, body.order_id);
+    order = fetched.order;
+    customer = fetched.customer;
+    items = fetched.items;
+    vendor = fetched.vendor;
+
+    // Idempotency guard: a previously confirmed order must not be emailed
+    // again (duplicate callback / reconcile race).
+    if (order.email_sent) {
+      console.log(`Order ${order.id} already emailed; skipping duplicate`);
+      return new Response(
+        JSON.stringify({ success: true, skipped: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!order || !customer?.email) {
@@ -497,7 +493,6 @@ serve(async (req) => {
 
     console.log('Sending order confirmation emails...');
     console.log('Order:', order.order_number || order.id);
-    console.log('Customer:', customer.email);
     console.log('Items:', items.length);
 
     const { data: settingsRows } = await supabase
@@ -565,10 +560,9 @@ serve(async (req) => {
 
     // Mark confirmed so a duplicate callback / next reconcile run does not
     // resend. Only set after the customer confirmation email succeeded.
-    // For Pay Later and Bank Transfer creation emails sent from the frontend,
-    // do NOT set email_sent=true: the post-payment confirmation email still
-    // needs to be sent via the server-side order_id path.
-    if (isOrderIdPath && !isPayLater && !isBankPending) {
+    // For Pay Later and Bank Transfer creation emails, do NOT set email_sent=true:
+    // the post-payment confirmation email still needs to be sent.
+    if (!isPayLater && !isBankPending) {
       await supabase.from('orders').update({ email_sent: true }).eq('id', order.id);
     }
 
@@ -580,8 +574,7 @@ serve(async (req) => {
       }
     );
   } catch (error: any) {
-    console.error('Email sending error:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Email sending error:', error?.message || error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       {

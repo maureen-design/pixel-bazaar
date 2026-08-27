@@ -79,6 +79,13 @@ serve(async (req) => {
     return new Response('ok', { status: 200, headers: jsonHeaders });
   }
 
+  // Require cron secret for authorization
+  const cronSecret = Deno.env.get('CRON_SECRET') || '';
+  const providedSecret = req.headers.get('x-cron-secret') || '';
+  if (!cronSecret || providedSecret !== cronSecret) {
+    return jsonResponse(403, { success: false, error: 'Unauthorized' });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';

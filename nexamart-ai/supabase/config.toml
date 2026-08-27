@@ -2,25 +2,34 @@
 project_id = "jsdynslcjnfdulzgvamj"
 
 # Edge Functions configuration
+# Client-facing functions: JWT required
 [functions.mpesa-stk-push]
 verify_jwt = false
 
-[functions.mpesa-callback]
-verify_jwt = false
+[functions.create-paystack-checkout]
+verify_jwt = true
 
-[functions.mpesa-reconcile]
+[functions.ai-assistant]
+verify_jwt = true
+
+[functions.process-card-payment]
+verify_jwt = true
+
+[functions.send-order-email]
+verify_jwt = true
+
+# Webhook/callback endpoints: no JWT (server-to-server from Daraja/Paystack)
+[functions.mpesa-callback]
 verify_jwt = false
 
 [functions.mpesa-callback-relay]
 verify_jwt = false
 
-[functions.send-order-email]
+[functions.paystack-webhook]
 verify_jwt = false
 
-[functions.process-card-payment]
-verify_jwt = false
-
-[functions.send-payment-reminder]
+# Cron/reconcile functions: no JWT but require x-cron-secret header
+[functions.mpesa-reconcile]
 verify_jwt = false
 
 [functions.bank-transfer-reconcile]
@@ -29,5 +38,5 @@ verify_jwt = false
 [functions.pay-later-reconcile]
 verify_jwt = false
 
-[functions.ai-assistant]
+[functions.send-payment-reminder]
 verify_jwt = false

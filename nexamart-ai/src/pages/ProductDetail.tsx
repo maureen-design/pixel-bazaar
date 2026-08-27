@@ -219,6 +219,9 @@ export function ProductDetail() {
       selectedVariant?.price ?? undefined,
       product
     );
+    toast.success('Added to cart', {
+      action: { label: 'View Cart', onClick: () => navigate('/cart') },
+    });
   };
 
   return (
@@ -226,13 +229,13 @@ export function ProductDetail() {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
-        <Link
-          to="/"
+        <button
+          onClick={() => navigate(-1)}
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Products
-        </Link>
+          Back
+        </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           {/* Image Gallery */}

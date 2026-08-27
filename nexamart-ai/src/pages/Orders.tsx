@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Package, ChevronDown, ChevronUp, ExternalLink, Clock, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -134,9 +135,9 @@ export function Orders() {
               <p className="text-muted-foreground mb-6">
                 You haven't placed any orders yet. Start shopping to see your orders here.
               </p>
-              <Button onClick={() => window.location.href = '/'}>
-                Start Shopping
-              </Button>
+              <Link to="/">
+                <Button>Continue Shopping</Button>
+              </Link>
             </Card>
           ) : (
             <div className="space-y-4">

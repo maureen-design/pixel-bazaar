@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Search, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Package, ChevronDown, ChevronUp, Calendar, Mail, Phone, MapPin, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatShippingAddress, formatOrderDate } from '../../utils/formatUtils';
+import { OrderTimeline } from '../../components/OrderTimeline';
 
 interface Order {
   id: string;
@@ -16,8 +18,9 @@ interface Order {
   status: string;
   shipping_address: string;
   payment_method: string;
+  payment_status: string;
   created_at: string;
-  profiles: any;
+  profiles: { full_name: string; email?: string; phone?: string } | null;
   order_items: OrderItem[];
 }
 
@@ -32,12 +35,15 @@ interface OrderItem {
   };
 }
 
+type DateRange = 'all' | '7d' | '30d' | '90d';
+
 export function VendorOrders() {
   const { vendor } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -52,7 +58,7 @@ export function VendorOrders() {
         .from('orders')
         .select(`
           *,
-          profiles (full_name, email),
+          profiles (full_name, email, phone),
           order_items (
             *,
             products (name, images)
@@ -78,11 +84,9 @@ export function VendorOrders() {
         .eq('id', orderId);
 
       if (error) throw error;
-
       toast.success('Order status updated');
       fetchOrders();
     } catch (error: any) {
-      console.error('Error updating order:', error);
       toast.error(error.message || 'Failed to update order');
     }
   };
@@ -90,24 +94,28 @@ export function VendorOrders() {
   const toggleExpanded = (orderId: string) => {
     setExpandedOrders(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(orderId)) {
-        newSet.delete(orderId);
-      } else {
-        newSet.add(orderId);
-      }
+      if (newSet.has(orderId)) newSet.delete(orderId);
+      else newSet.add(orderId);
       return newSet;
     });
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
-      order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.profiles?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const matchesSearch =
+        order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.profiles?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      let matchesDate = true;
+      if (dateRange !== 'all') {
+        const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        matchesDate = new Date(order.created_at) >= cutoff;
+      }
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [orders, searchQuery, statusFilter, dateRange]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -116,27 +124,52 @@ export function VendorOrders() {
     }).format(price);
   };
 
+  const handleExport = () => {
+    const headers = ['Order #', 'Customer', 'Date', 'Items', 'Total', 'Status', 'Payment'];
+    const rows = filteredOrders.map(o => [
+      o.order_number,
+      o.profiles?.full_name || '',
+      formatOrderDate(o.created_at),
+      o.order_items.length,
+      o.total_amount,
+      o.status,
+      o.payment_method,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `orders-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Orders exported');
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
-        return 'bg-warning/20 text-warning';
-      case 'processing':
-        return 'bg-primary/20 text-primary';
-      case 'shipped':
-        return 'bg-accent/20 text-accent-foreground';
-      case 'delivered':
-        return 'bg-success/20 text-success';
-      case 'cancelled':
-        return 'bg-destructive/20 text-destructive';
-      default:
-        return 'bg-muted text-muted-foreground';
+      case 'pending': return 'bg-warning/20 text-warning';
+      case 'processing': return 'bg-primary/20 text-primary';
+      case 'shipped': return 'bg-accent/20 text-accent-foreground';
+      case 'delivered': return 'bg-success/20 text-success';
+      case 'cancelled': return 'bg-destructive/20 text-destructive';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="space-y-6">
+        <div className="space-y-2 animate-pulse">
+          <div className="h-8 w-40 bg-muted rounded" />
+          <div className="h-4 w-56 bg-muted rounded" />
+        </div>
+        <div className="flex gap-3">
+          <div className="h-10 flex-1 bg-muted rounded-lg" />
+          <div className="h-10 w-44 bg-muted rounded-lg" />
+          <div className="h-10 w-36 bg-muted rounded-lg" />
+        </div>
+        {[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted rounded-xl" />)}
       </div>
     );
   }
@@ -144,25 +177,33 @@ export function VendorOrders() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Orders</h1>
-        <p className="text-muted-foreground">Manage customer orders</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Orders</h1>
+          <p className="text-muted-foreground">
+            {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search orders..."
+            placeholder="Search by order # or customer name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 bg-card border-border"
+            className="pl-10 bg-card border-border"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 bg-card border-border">
-            <SelectValue placeholder="Filter by status" />
+          <SelectTrigger className="w-44 bg-card border-border">
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
@@ -173,63 +214,74 @@ export function VendorOrders() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={dateRange} onValueChange={(v: any) => setDateRange(v)}>
+          <SelectTrigger className="w-36 bg-card border-border">
+            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Time</SelectItem>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Orders List */}
       {filteredOrders.length === 0 ? (
         <Card className="p-12 bg-card border-border text-center">
-          <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No orders found</h3>
-          <p className="text-muted-foreground">
-            {searchQuery || statusFilter !== 'all' 
-              ? 'Try adjusting your filters' 
+          <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+          <h3 className="text-lg font-semibold mb-2">No orders found</h3>
+          <p className="text-muted-foreground text-sm">
+            {searchQuery || statusFilter !== 'all' || dateRange !== 'all'
+              ? 'Try adjusting your filters'
               : 'Orders will appear here once customers make purchases'}
           </p>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredOrders.map((order) => (
             <motion.div
               key={order.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
             >
               <Card className="bg-card border-border overflow-hidden">
                 {/* Order Header */}
-                <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                     role="button"
-                     tabIndex={0}
-                     aria-expanded={expandedOrders.has(order.id)}
-                     aria-controls={`order-details-${order.id}`}
-                     onClick={() => toggleExpanded(order.id)}
-                     onKeyDown={(e) => {
-                       if (e.key === 'Enter' || e.key === ' ') {
-                         e.preventDefault();
-                         toggleExpanded(order.id);
-                       }
-                     }}>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-2">
-                      <h3 className="font-semibold">#{order.order_number}</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </span>
+                <button
+                  onClick={() => toggleExpanded(order.id)}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                  aria-expanded={expandedOrders.has(order.id)}
+                  aria-controls={`order-details-${order.id}`}
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0">
+                      <Package className="w-4 h-4 text-muted-foreground" />
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>{order.profiles?.full_name}</span>
-                      <span>•</span>
-                      <span>{formatOrderDate(order.created_at)}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="font-semibold text-sm">#{order.order_number}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(order.status)}`}>
+                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{order.profiles?.full_name}</span>
+                        <span className="text-border">·</span>
+                        <span>{formatOrderDate(order.created_at)}</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p className="font-bold">{formatPrice(order.total_amount)}</p>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <p className="font-bold text-sm">{formatPrice(order.total_amount)}</p>
                     {expandedOrders.has(order.id) ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      <ChevronUp className="w-4 h-4 text-muted-foreground" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
-                </div>
+                </button>
 
                 {/* Order Details */}
                 <AnimatePresence>
@@ -241,57 +293,109 @@ export function VendorOrders() {
                       exit={{ height: 0, opacity: 0 }}
                       className="border-t border-border"
                     >
-                      <div className="p-4 space-y-4">
+                      <div className="p-4 space-y-5">
+                        {/* Timeline */}
+                        <OrderTimeline
+                          status={order.status}
+                          paymentStatus={order.payment_status || 'unpaid'}
+                        />
+
+                        {/* Customer Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-muted/30 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+                              <span className="text-xs font-bold text-muted-foreground">
+                                {order.profiles?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Customer</p>
+                              <p className="text-sm font-medium">{order.profiles?.full_name}</p>
+                            </div>
+                          </div>
+                          {order.profiles?.email && (
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+                                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Email</p>
+                                <p className="text-sm font-medium truncate">{order.profiles.email}</p>
+                              </div>
+                            </div>
+                          )}
+                          {order.profiles?.phone && (
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+                                <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Phone</p>
+                                <p className="text-sm font-medium">{order.profiles.phone}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Order Items */}
                         <div>
-                          <h4 className="font-medium mb-3">Order Items</h4>
+                          <h4 className="font-medium mb-3 text-sm">Items Ordered</h4>
                           <div className="space-y-3">
                             {order.order_items.map((item) => (
-                              <div key={item.id} className="flex items-center gap-4">
-                                {item.products?.images && item.products.images[0] && (
+                              <div key={item.id} className="flex items-center gap-3">
+                                {item.products?.images?.[0] ? (
                                   <img
                                     src={item.products.images[0]}
                                     alt={item.products.name}
-                                    className="w-16 h-16 object-cover rounded-lg"
+                                    className="w-12 h-12 object-cover rounded-lg bg-muted"
                                   />
+                                ) : (
+                                  <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
+                                    <Package className="w-4 h-4 text-muted-foreground" />
+                                  </div>
                                 )}
-                                <div className="flex-1">
-                                  <p className="font-medium">{item.products?.name}</p>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{item.products?.name}</p>
                                   {item.variant_attributes && (
                                     <p className="text-xs text-muted-foreground">
                                       {Object.values(item.variant_attributes).join(', ')}
                                     </p>
                                   )}
-                                  <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
                                 </div>
-                                <p className="font-medium">{formatPrice(item.product_price * item.quantity)}</p>
+                                <div className="text-right shrink-0">
+                                  <p className="text-sm font-medium">{formatPrice(item.product_price * item.quantity)}</p>
+                                  <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        {/* Shipping Address */}
-                        <div>
-                          <h4 className="font-medium mb-2">Shipping Address</h4>
-                          <p className="text-sm text-muted-foreground whitespace-pre-line">
-                            {formatShippingAddress(order.shipping_address)}
-                          </p>
-                        </div>
-
-                        {/* Payment Method */}
-                        <div>
-                          <h4 className="font-medium mb-2">Payment Method</h4>
-                          <p className="text-sm text-muted-foreground capitalize">{order.payment_method}</p>
+                        {/* Shipping + Payment */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <h4 className="font-medium mb-1.5 text-sm flex items-center gap-2">
+                              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                              Shipping Address
+                            </h4>
+                            <p className="text-sm text-muted-foreground whitespace-pre-line">
+                              {formatShippingAddress(order.shipping_address)}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <h4 className="font-medium mb-1.5 text-sm">Payment</h4>
+                            <p className="text-sm text-muted-foreground capitalize">{order.payment_method}</p>
+                          </div>
                         </div>
 
                         {/* Status Update */}
-                        <div>
-                          <h4 className="font-medium mb-2">Update Status</h4>
+                        <div className="flex items-center gap-3 pt-2 border-t border-border">
+                          <span className="text-sm font-medium">Update Status:</span>
                           <Select
                             value={order.status}
                             onValueChange={(value: string) => handleStatusUpdate(order.id, value)}
                           >
-                            <SelectTrigger className="bg-muted border-border">
+                            <SelectTrigger className="w-44 bg-muted border-border h-9">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

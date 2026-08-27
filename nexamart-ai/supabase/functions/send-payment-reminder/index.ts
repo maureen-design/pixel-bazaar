@@ -1,12 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-client-info, apikey',
-  'Access-Control-Max-Age': '86400',
-};
+const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const transporter = nodemailer.createTransport({
   host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
@@ -20,7 +15,21 @@ const transporter = nodemailer.createTransport({
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders });
+    return new Response('ok', { status: 200, headers: jsonHeaders });
+  }
+
+  // Only accept requests with service_role or cron secret
+  const authHeader = req.headers.get('Authorization') || '';
+  const cronSecret = Deno.env.get('CRON_SECRET') || '';
+  const providedSecret = req.headers.get('x-cron-secret') || '';
+  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const isServiceRole = authHeader === `Bearer ${serviceRole}`;
+  const isCron = cronSecret && providedSecret === cronSecret;
+  if (!isServiceRole && !isCron) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Unauthorized' }),
+      { status: 403, headers: jsonHeaders }
+    );
   }
 
   try {
@@ -29,7 +38,7 @@ serve(async (req) => {
     if (!order || !customer?.email) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing required fields: order, customer.email' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: jsonHeaders }
       );
     }
 
@@ -89,13 +98,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, messageId: result.messageId }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: jsonHeaders }
     );
   } catch (error: any) {
     console.error('Error sending payment reminder:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: jsonHeaders }
     );
   }
 });

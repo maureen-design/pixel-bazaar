@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
-import { Search, Activity, Download, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Activity, Download, Filter, ClipboardList } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Pagination } from '../../components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { motion } from 'motion/react';
+
+const PAGE_SIZE = 20;
 
 const actionColors: Record<string, string> = {
   vendor_approve: 'bg-success/20 text-success',
@@ -36,13 +40,55 @@ const actionLabels: Record<string, string> = {
   order_status_change: 'Order Status Changed',
 };
 
+const dateRangeOptions = [
+  { value: 'all', label: 'All' },
+  { value: '7', label: 'Last 7 days' },
+  { value: '30', label: 'Last 30 days' },
+  { value: '90', label: 'Last 90 days' },
+];
+
+function formatDetails(details: Record<string, unknown> | null | undefined) {
+  if (!details || typeof details !== 'object') return null;
+  return Object.entries(details).map(([key, value]) => (
+    <span key={key} className="inline-block mr-3 mb-1">
+      <span className="font-medium">{key.replace(/_/g, ' ')}:</span>{' '}
+      <span className="text-muted-foreground">{String(value)}</span>
+    </span>
+  ));
+}
+
+function SkeletonLoader() {
+  return (
+    <div className="divide-y divide-border">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="p-4">
+          <div className="flex items-start gap-3">
+            <Skeleton className="h-5 w-5 rounded-full mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AdminActivityLogs() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
+  const [dateRange, setDateRange] = useState('all');
+  const [page, setPage] = useState(1);
 
   useEffect(() => { fetchLogs(); }, []);
+
+  useEffect(() => { setPage(1); }, [search, actionFilter, dateRange]);
 
   const fetchLogs = async () => {
     try {
@@ -51,11 +97,22 @@ export function AdminActivityLogs() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  const filtered = logs.filter((l) => {
-    const matchesSearch = l.user_email?.toLowerCase().includes(search.toLowerCase()) || l.action?.toLowerCase().includes(search.toLowerCase());
-    const matchesAction = actionFilter === 'all' || l.action === actionFilter;
-    return matchesSearch && matchesAction;
-  });
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    return logs.filter((l) => {
+      const matchesSearch = l.user_email?.toLowerCase().includes(search.toLowerCase()) || l.action?.toLowerCase().includes(search.toLowerCase());
+      const matchesAction = actionFilter === 'all' || l.action === actionFilter;
+      if (dateRange !== 'all') {
+        const days = Number(dateRange);
+        const cutoff = now - days * 24 * 60 * 60 * 1000;
+        if (new Date(l.created_at).getTime() < cutoff) return false;
+      }
+      return matchesSearch && matchesAction;
+    });
+  }, [logs, search, actionFilter, dateRange]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const formatDate = (d: string) => new Date(d).toLocaleString();
   const uniqueActions = [...new Set(logs.map((l) => l.action))];
@@ -98,33 +155,55 @@ export function AdminActivityLogs() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={dateRange} onValueChange={setDateRange}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {dateRangeOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button variant="outline" onClick={fetchLogs} className="gap-2"><Filter className="w-4 h-4" /> Refresh</Button>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
-        {loading ? <div className="p-8 text-center"><div className="h-8 w-8 animate-spin mx-auto border-4 border-primary border-t-transparent rounded-full" /></div>
-        : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground">No activity logs found</div>
-        : <div className="divide-y divide-slate-800">
-            {filtered.map((l, i) => (
-              <motion.div key={l.id || i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 hover:bg-muted/50">
-                <div className="flex items-start gap-3">
-                  <Activity className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge className={actionColors[l.action] || 'bg-muted text-muted-foreground'}>
-                        {actionLabels[l.action] || l.action}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{formatDate(l.created_at)}</span>
+        {loading ? <SkeletonLoader />
+        : filtered.length === 0 ? (
+          <div className="p-12 text-center">
+            <ClipboardList className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-muted-foreground font-medium">No activity logs found</p>
+            <p className="text-sm text-muted-foreground/60 mt-1">Try adjusting your filters</p>
+          </div>
+        )
+        : <>
+            <div className="divide-y divide-border">
+              {paginated.map((l, i) => (
+                <motion.div key={l.id || i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 hover:bg-muted/50">
+                  <div className="flex items-start gap-3">
+                    <Activity className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={actionColors[l.action] || 'bg-muted text-muted-foreground'}>
+                          {actionLabels[l.action] || l.action}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{formatDate(l.created_at)}</span>
+                      </div>
+                      <p className="text-sm text-secondary-foreground">
+                        <span className="font-medium">{l.user_email || 'System'}</span>
+                      </p>
+                      {l.details && typeof l.details === 'object' && Object.keys(l.details).length > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {formatDetails(l.details)}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-secondary-foreground">
-                      <span className="font-medium">{l.user_email || 'System'}</span>
-                      {l.details && <span className="text-muted-foreground"> — {JSON.stringify(l.details)}</span>}
-                    </p>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>}
+                </motion.div>
+              ))}
+            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          </>
+        }
       </Card>
     </div>
   );

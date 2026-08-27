@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingCart, ArrowRight, Truck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -43,6 +43,11 @@ export function Cart() {
   const tax = Math.round(cartTotal * taxRate * 100) / 100;
   const total = cartTotal + estimatedShipping + tax;
 
+  const FREE_SHIPPING_THRESHOLD = 2000;
+  const amountNeeded = Math.max(0, FREE_SHIPPING_THRESHOLD - cartTotal);
+  const qualifiesForFreeShipping = cartTotal >= FREE_SHIPPING_THRESHOLD;
+  const progressPercent = Math.min(100, (cartTotal / FREE_SHIPPING_THRESHOLD) * 100);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -67,7 +72,7 @@ export function Cart() {
 
         {cartItems.length === 0 ? (
           <div className="bg-card rounded-xl p-12 border border-border text-center">
-            <ShoppingBag className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <ShoppingCart className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-2xl font-semibold mb-2">
               {user ? 'Your cart is empty' : 'Your cart is waiting'}
             </h2>
@@ -177,13 +182,31 @@ export function Cart() {
                     <span className="text-muted-foreground">Subtotal</span>
                     <span className="text-foreground">{formatPrice(cartTotal)}</span>
                   </div>
+
+                  {/* Free Shipping Progress Bar */}
+                  <div className="rounded-lg bg-muted/50 border border-border p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Truck className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-medium text-foreground">
+                        {qualifiesForFreeShipping
+                          ? 'You qualify for free shipping!'
+                          : `Add ${formatPrice(amountNeeded)} more for free shipping`}
+                      </span>
+                    </div>
+                    <div className="w-full bg-border rounded-full h-2">
+                      <div
+                        className="bg-primary rounded-full h-2 transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
                   
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimated Shipping</span>
                     <span className="text-foreground">{formatPrice(estimatedShipping)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground -mt-2">
-                    {formatPrice(estimatedShipping)}. Final shipping calculated at checkout.
+                    {formatPrice(estimatedShipping)}. Final shipping calculated at checkout based on your location.
                   </p>
                   
                   <div className="flex justify-between">
@@ -201,10 +224,16 @@ export function Cart() {
 
                 <Link to="/checkout" className="block">
                   <Button className="w-full py-4 text-lg">
-                    Proceed to Checkout
+                    {user ? 'Proceed to Checkout' : 'Sign In to Checkout'}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </Link>
+
+                {!user && (
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    You'll be asked to sign in or create an account to complete your order.
+                  </p>
+                )}
 
                 <Link to="/" className="block mt-4">
                   <Button variant="outline" className="w-full">

@@ -1,86 +1,113 @@
-import { MessageCircle, Share2, Heart, Video } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
+
+function getMonogram(siteName: string): string {
+  const words = siteName
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(/\s+/)
+    .filter(Boolean);
+  const initials = ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase();
+  return initials || 'NM';
+}
+
+const SHOP = [
+  { to: '/', label: 'Home' },
+  { to: '/search', label: 'Browse Products' },
+  { to: '/cart', label: 'Cart' },
+  { to: '/wishlist', label: 'Wishlist' },
+];
+
+const ACCOUNT = [
+  { to: '/orders', label: 'My Orders' },
+  { to: '/profile', label: 'Profile' },
+  { to: '/vendor/apply', label: 'Become a Vendor' },
+];
+
+const COMPANY = [
+  { to: '/about', label: 'About Us' },
+  { to: '/contact', label: 'Contact' },
+  { to: '/privacy', label: 'Privacy Policy' },
+  { to: '/terms', label: 'Terms of Service' },
+];
+
+function PaymentBadge({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border border-gray-200 bg-white shadow-sm"
+      style={{ color }}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function Footer() {
   const { settings } = useSettings();
 
   return (
-    <footer className="bg-card border-t border-border">
+    <footer className="bg-[#050810] border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Company Info */}
-          <div className="col-span-1 md:col-span-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {/* Brand */}
+          <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-gradient-to-br from-brand to-brand-dark rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">NM</span>
+                <span className="text-white font-bold text-sm">{getMonogram(settings.siteName)}</span>
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
                 {settings.siteName}
               </span>
             </div>
-            <p className="text-muted-foreground mb-4">
-              {settings.siteDescription}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              © 2026 {settings.siteName}. All rights reserved.
-            </p>
+            <p className="text-slate-500 text-sm mb-4 max-w-xs">{settings.siteDescription}</p>
+            <p className="text-slate-500 text-xs">© {new Date().getFullYear()} {settings.siteName}. All rights reserved.</p>
           </div>
 
-          {/* Quick Links */}
+          {/* Shop */}
           <div>
-            <h3 className="text-foreground font-semibold mb-4">Quick Links</h3>
+            <h3 className="text-white font-semibold mb-4">Shop</h3>
             <ul className="space-y-2">
-              <li>
-                <a href="/about" className="text-muted-foreground hover:text-foreground transition-colors">
-                  About Us
-                </a>
-              </li>
-              <li>
-                <a href="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Contact
-                </a>
-              </li>
-              <li>
-                <a href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Privacy Policy
-                </a>
-              </li>
-              <li>
-                <a href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Terms of Service
-                </a>
-              </li>
+              {SHOP.map((link) => (
+                <li key={link.to + link.label}>
+                  <Link to={link.to} className="text-slate-400 text-sm hover:text-white transition-colors">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Social Media */}
+          {/* Account */}
           <div>
-            <h3 className="text-foreground font-semibold mb-4">Follow Us</h3>
-            <div className="flex gap-4">
-              <a
-                href="#"
-                className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground hover:bg-primary hover:text-white transition-colors"
-              >
-                <MessageCircle className="w-5 h-5" />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground hover:bg-primary/80 hover:text-white transition-colors"
-              >
-                <Share2 className="w-5 h-5" />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground hover:bg-pink-600 hover:text-white transition-colors"
-              >
-                <Heart className="w-5 h-5" />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground hover:bg-destructive hover:text-white transition-colors"
-              >
-                <Video className="w-5 h-5" />
-              </a>
+            <h3 className="text-white font-semibold mb-4">Account</h3>
+            <ul className="space-y-2">
+              {ACCOUNT.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-slate-400 text-sm hover:text-white transition-colors">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Company + Payment */}
+          <div>
+            <h3 className="text-white font-semibold mb-4">Company</h3>
+            <ul className="space-y-2 mb-6">
+              {COMPANY.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-slate-400 text-sm hover:text-white transition-colors">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <h3 className="text-white font-semibold mb-3">We Accept</h3>
+            <div className="flex flex-wrap gap-2">
+              {settings.mpesaEnabled && <PaymentBadge label="M-Pesa" color="#4CAF50" />}
+              {settings.cardEnabled && <PaymentBadge label="Visa" color="#1A1F71" />}
+              {settings.cardEnabled && <PaymentBadge label="Mastercard" color="#EB001B" />}
+              {settings.bankTransferEnabled && <PaymentBadge label="Bank" color="#A78BFA" />}
             </div>
           </div>
         </div>

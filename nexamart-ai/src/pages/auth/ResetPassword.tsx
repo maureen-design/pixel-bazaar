@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { AuthLayout } from '../../layouts/AuthLayout';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
-import { CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { meetsAllRequirements } from '../../utils/passwordValidation';
 import { PasswordInput } from '../../components/ui/PasswordInput';
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements';
@@ -133,7 +133,7 @@ export function ResetPassword() {
       <AuthLayout title="Reset your password" subtitle="We couldn't verify this reset link">
         <div className="text-center space-y-4">
           <div className="w-14 h-14 bg-destructive/10 rounded-full flex items-center justify-center mx-auto">
-            <span className="text-destructive text-2xl font-bold">!</span>
+            <AlertCircle aria-hidden="true" className="w-7 h-7 text-destructive" />
           </div>
           <p className="text-muted-foreground">
             This password reset link is invalid or has expired. Please request a new one.

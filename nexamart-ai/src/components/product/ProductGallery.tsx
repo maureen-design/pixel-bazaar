@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SafeImg } from '../SafeImg';
 
 interface ProductGalleryProps {
   images: string[];
@@ -151,7 +152,7 @@ export function ProductGallery({
                     : 'border-border hover:border-muted-foreground/60'
                 }`}
               >
-                <img
+                <SafeImg
                   src={image}
                   alt=""
                   loading="lazy"

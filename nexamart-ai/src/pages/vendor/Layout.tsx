@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, BarChart3, LogOut, Store, Menu, X, ArrowLeft } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, BarChart3, LogOut, Store, Menu, X, ArrowLeft, Settings, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/vendor/products', icon: Package, label: 'Products' },
   { path: '/vendor/orders', icon: ShoppingCart, label: 'Orders' },
   { path: '/vendor/analytics', icon: BarChart3, label: 'Analytics' },
+  { path: '/vendor/settings', icon: Settings, label: 'Settings' },
 ];
 
 export function VendorLayout() {
@@ -132,8 +133,14 @@ function SidebarContent({
       {/* Vendor Info */}
       {vendor && (
         <div className="p-4 border-b border-border">
-          <p className="text-sm text-muted-foreground">Store Name</p>
-          <p className="font-medium text-sm truncate">{vendor.business_name}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-sm truncate">
+              {vendor.business_name || vendor.store_name}
+            </p>
+            {vendor.is_verified && (
+              <CheckCircle className="w-4 h-4 text-success shrink-0" aria-label="Verified vendor" />
+            )}
+          </div>
         </div>
       )}
 

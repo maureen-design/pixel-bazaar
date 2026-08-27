@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Package, Truck, MapPin, Calendar, ShoppingBag, Smartphone, Clock, XCircle, Zap, Store, AlertTriangle, Phone, CreditCard, Check, Building2 } from 'lucide-react';
+import { CheckCircle2, Package, Truck, MapPin, Calendar, ShoppingCart, Smartphone, Clock, XCircle, Zap, Store, AlertTriangle, Phone, CreditCard, Check, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -10,7 +10,10 @@ import { Input } from '../components/ui/input';
 import { CardPaymentForm } from '../components/checkout/CardPaymentForm';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
-import { formatShippingAddress } from '../utils/formatUtils';
+import { formatShippingAddress, addBusinessDays } from '../utils/formatUtils';
+import { SafeImg } from '../components/SafeImg';
+import { OrderTimeline, OrderCancelledNotice } from '../components/OrderTimeline';
+import { formatBankAccount } from '../lib/formatBankAccount';
 
 interface OrderItem {
   id: string;
@@ -45,17 +48,17 @@ interface Order {
 
 export function OrderConfirmation() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [bankSettings, setBankSettings] = useState<{ bankName: string; bankAccountName: string; bankAccountNumber: string; bankBranch: string; bankSwiftCode: string; } | null>(null);
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
 
   // Pay Now state for unpaid Pay Later orders
-  const [mpesaPhone, setMpesaPhone] = useState('');
+  const [mpesaPhone, setMpesaPhone] = useState(profile?.phone || '');
   const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error' | 'cancelled' | 'failed' | 'pending'>('idle');
-  const [, setMpesaCheckoutId] = useState('');
   const [paying, setPaying] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -71,6 +74,24 @@ export function OrderConfirmation() {
     fetchOrder();
     fetchBankSettings();
   }, [orderId, user]);
+
+  useEffect(() => {
+    if (!order || order.items.length === 0) return;
+    const ids = order.items.map((i) => i.product_id).filter(Boolean);
+    if (ids.length === 0) return;
+    supabase
+      .from('products')
+      .select('id, images')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, string> = {};
+        for (const p of data) {
+          if (p.images && p.images.length > 0) map[p.id] = p.images[0];
+        }
+        setProductImages(map);
+      });
+  }, [order?.id]);
 
   const fetchBankSettings = async () => {
     const { data } = await supabase
@@ -137,7 +158,6 @@ export function OrderConfirmation() {
       ]);
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
-      setMpesaCheckoutId(data.checkoutRequestId);
       setMpesaStatus('sent');
       toast.success('Payment request sent. Check your phone to complete payment.');
       pollOrderStatus(order.id);
@@ -147,12 +167,6 @@ export function OrderConfirmation() {
     } finally {
       setPaying(false);
     }
-  };
-
-  const handlePayNowCard = async () => {
-    await fetchOrder();
-    await clearCart();
-    toast.success('Payment successful!');
   };
 
   const pollOrderStatus = (oid: string) => {
@@ -179,6 +193,17 @@ export function OrderConfirmation() {
     }, 5000);
   };
 
+  // Card payments return from Paystack's hosted checkout to this page, so the
+  // cart is cleared here once the paid state is observed (covers both the
+  // checkout entry and the Pay-Later "pay now" path; no-op if already empty).
+  const cardCartClearedRef = useRef(false);
+  useEffect(() => {
+    if (!cardCartClearedRef.current && order?.payment_method === 'card' && order?.payment_status === 'paid') {
+      cardCartClearedRef.current = true;
+      clearCart();
+    }
+  }, [order?.payment_method, order?.payment_status, clearCart]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -194,7 +219,7 @@ export function OrderConfirmation() {
           <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-xl text-foreground">Order not found</h2>
           <Link to="/" className="text-primary hover:text-primary/80 mt-4 inline-block">
-            Return to Home
+            Back to Home
           </Link>
         </div>
       </div>
@@ -227,6 +252,20 @@ export function OrderConfirmation() {
   };
 
   const DeliveryIcon = deliveryIcons[order.delivery_method] || Truck;
+
+  const formatDateShort = (d: Date) => d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+
+  const getDeliveryDateRange = () => {
+    const created = new Date(order.created_at || Date.now());
+    switch (order.delivery_method) {
+      case 'express':
+        return `${formatDateShort(addBusinessDays(created, 1))} - ${formatDateShort(addBusinessDays(created, 2))}`;
+      case 'pickup':
+        return `Ready by ${formatDateShort(addBusinessDays(created, 1))}`;
+      default:
+        return `${formatDateShort(addBusinessDays(created, 3))} - ${formatDateShort(addBusinessDays(created, 5))}`;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background py-12 px-4">
@@ -263,6 +302,13 @@ export function OrderConfirmation() {
               : 'Thank you for your order. We\'ll send you a confirmation email shortly.'}
           </p>
         </div>
+
+        {/* Order progress timeline / cancelled notice */}
+        {order.status === 'cancelled' || order.payment_status === 'failed' ? (
+          <OrderCancelledNotice />
+        ) : (
+          <OrderTimeline status={order.status} paymentStatus={order.payment_status || 'pending'} />
+        )}
 
         {/* Deadline Alert — Pay Later and Bank Transfer */}
         {(isPayLater || isBankPending) && order.payment_deadline && (
@@ -360,7 +406,6 @@ export function OrderConfirmation() {
                 amount={order.total_amount}
                 orderId={order.id}
                 formatPrice={formatPrice}
-                onSuccess={handlePayNowCard}
                 onBack={() => {}}
               />
             ) : (
@@ -392,7 +437,7 @@ export function OrderConfirmation() {
               {bankSettings.bankAccountNumber && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Account Number:</span>
-                  <span className="text-foreground font-mono font-medium">{bankSettings.bankAccountNumber}</span>
+                  <span className="text-foreground font-mono font-medium">{formatBankAccount(bankSettings.bankAccountNumber)}</span>
                 </div>
               )}
               {bankSettings.bankBranch && (
@@ -453,7 +498,7 @@ export function OrderConfirmation() {
             </span>
             <span className="flex items-center gap-2">
               <Truck className="h-4 w-4" />
-              {deliveryLabels[order.delivery_method] || order.payment_method}
+              {deliveryLabels[order.delivery_method] || order.delivery_method}
             </span>
           </div>
         </div>
@@ -470,6 +515,12 @@ export function OrderConfirmation() {
               <span className="text-foreground font-medium">{deliveryLabels[order.delivery_method] || order.delivery_method}</span>
               {order.delivery_cost > 0 && (
                 <span className="text-muted-foreground ml-4">Cost: {formatPrice(order.delivery_cost)}</span>
+              )}
+              {order.delivery_method !== 'pickup' && (
+                <p className="text-foreground font-medium mt-2">Estimated delivery: {getDeliveryDateRange()}</p>
+              )}
+              {order.delivery_method === 'pickup' && (
+                <p className="text-foreground font-medium mt-2">{getDeliveryDateRange()}</p>
               )}
             </div>
           </div>
@@ -534,9 +585,14 @@ export function OrderConfirmation() {
           <h2 className="text-lg font-semibold text-foreground mb-4">Order Summary</h2>
           <div className="space-y-4">
             {order.items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div className="flex-1">
-                  <p className="text-foreground font-medium">{item.product_name}</p>
+              <div key={item.id} className="flex items-center gap-4 py-3 border-b border-border last:border-0">
+                {productImages[item.product_id] && (
+                  <div className="w-14 h-14 bg-muted rounded-lg overflow-hidden flex-shrink-0">
+                    <SafeImg src={productImages[item.product_id]} alt={item.product_name} className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-foreground font-medium truncate">{item.product_name}</p>
                   {item.variant_attributes && (
                     <p className="text-xs text-muted-foreground">
                       {Object.values(item.variant_attributes).join(', ')}
@@ -587,7 +643,7 @@ export function OrderConfirmation() {
         <div className="flex flex-col sm:flex-row gap-4">
           <Link to="/" className="flex-1">
             <Button className="w-full">
-              <ShoppingBag className="h-4 w-4 mr-2" />
+              <ShoppingCart className="h-4 w-4 mr-2" />
               Continue Shopping
             </Button>
           </Link>

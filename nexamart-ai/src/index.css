@@ -80,14 +80,14 @@
 }
 
 :root {
-  /* Brand Colors - HSL */
-  --brand: 24 95% 48%;
-  --brand-light: 24 95% 58%;
-  --brand-dark: 24 95% 38%;
+  /* Brand Colors - HSL (Steel Blue) */
+  --brand: 215 85% 55%;
+  --brand-light: 215 85% 65%;
+  --brand-dark: 215 85% 45%;
 
-  /* AI Accent */
-  --ai: 200 90% 60%;
-  --ai-glow: 200 90% 60% / 0.3;
+  /* AI Accent (Teal) */
+  --ai: 175 75% 55%;
+  --ai-glow: 175 75% 55% / 0.3;
 
   /* Role Colors */
   --vendor: 200 100% 50%;
@@ -129,8 +129,8 @@
   --radius: 0.625rem;
 
   /* Chart */
-  --chart-1: 24 95% 48%;
-  --chart-2: 200 100% 50%;
+  --chart-1: 215 85% 55%;
+  --chart-2: 175 75% 55%;
   --chart-3: 270 90% 60%;
   --chart-4: 142 76% 36%;
   --chart-5: 38 92% 50%;
@@ -172,7 +172,7 @@
   --motion-slow-val: 400ms;
 
   /* Accessibility */
-  --focus-ring: 24 95% 48%;
+  --focus-ring: 215 85% 55%;
   --focus-ring-offset: 2px;
   --text-scale-small: 0.9;
   --text-scale-normal: 1;
@@ -181,9 +181,9 @@
 }
 
 .dark {
-  --brand: 24 95% 48%;
-  --brand-light: 24 95% 58%;
-  --brand-dark: 24 95% 38%;
+  --brand: 215 85% 55%;
+  --brand-light: 215 85% 65%;
+  --brand-dark: 215 85% 45%;
 
   --foreground: 210 20% 98%;
   --foreground-secondary: 215 16% 65%;

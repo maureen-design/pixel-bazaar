@@ -79,7 +79,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const mergingRef = useRef(false);
 
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cartItems.reduce((sum, item) => sum + (item.variant_price || item.products?.price || 0) * item.quantity, 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + (item.variant_price ?? item.products?.price ?? 0) * item.quantity, 0);
 
   const fetchCart = async () => {
     if (!user) {
@@ -134,9 +134,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         );
 
         if (existing) {
+          // Cap merged quantity at available stock
+          const stock = guestItem.products?.stock_quantity ?? existing.products?.stock_quantity ?? Infinity;
+          const cappedQty = Math.min(existing.quantity + guestItem.quantity, stock);
           const { error: updErr } = await supabase
             .from('cart_items')
-            .update({ quantity: existing.quantity + guestItem.quantity })
+            .update({ quantity: cappedQty })
             .eq('id', existing.id);
           if (updErr) throw updErr;
         } else {
@@ -148,7 +151,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               quantity: guestItem.quantity,
               variant_id: guestItem.variant_id || null,
               variant_attributes: guestItem.variant_attributes || null,
-              variant_price: guestItem.variant_price || null,
+              variant_price: guestItem.variant_price ?? null,
             });
           if (insErr) throw insErr;
         }

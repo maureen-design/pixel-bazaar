@@ -32,7 +32,7 @@ export interface PlatformSettings {
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
   siteName: 'NexaMart AI',
-  siteDescription: 'Your trusted multi-vendor marketplace for amazing products from trusted sellers.',
+  siteDescription: 'A multi-vendor marketplace connecting customers with verified sellers.',
   supportEmail: 'support@nexamart-ai.com',
   currency: 'KES',
   taxRate: 16,

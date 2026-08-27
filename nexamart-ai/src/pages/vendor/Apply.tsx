@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, FileText, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -20,16 +20,16 @@ export function VendorApply() {
     business_name: '',
     business_description: '',
     phone: '',
-    business_registration: '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Redirect if already a vendor
-  if (vendor?.is_verified) {
-    navigate('/vendor/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    if (vendor?.is_verified) {
+      navigate('/vendor/dashboard');
+    }
+  }, [vendor, navigate]);
 
   // Show pending status if application exists but not approved
   if (vendor && !vendor.is_verified) {
@@ -50,7 +50,7 @@ export function VendorApply() {
               Your vendor application is currently being reviewed by our team. 
               You will be notified once your application is approved.
             </p>
-            <Button onClick={() => navigate('/')}>Return to Home</Button>
+            <Button onClick={() => navigate('/')}>Back to Home</Button>
           </motion.div>
         </div>
         <Footer />
@@ -145,7 +145,7 @@ export function VendorApply() {
               Your vendor application has been submitted successfully. 
               Our team will review your application and you will be notified once approved.
             </p>
-            <Button onClick={() => navigate('/')}>Return to Home</Button>
+            <Button onClick={() => navigate('/')}>Back to Home</Button>
           </motion.div>
         </div>
         <Footer />
@@ -211,17 +211,6 @@ export function VendorApply() {
                 onChange={handleInputChange}
                 placeholder="+254 7XX XXX XXX"
                 error={errors.phone}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Business Registration (Optional)</label>
-              <Input
-                type="text"
-                name="business_registration"
-                value={formData.business_registration}
-                onChange={handleInputChange}
-                placeholder="Business Registration Number"
               />
             </div>
 
