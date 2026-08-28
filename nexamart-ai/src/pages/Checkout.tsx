@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Zap, Shield, ShoppingCart } from 'lucide-react';
+import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Shield, ShoppingCart, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -430,7 +430,7 @@ export function Checkout() {
                     disabled={resendCooldown > 0}
                     className="gap-2"
                   >
-                    <Zap className="w-4 h-4" />
+                    <RefreshCw className="w-4 h-4" />
                     {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend STK Push'}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate('/cart')}>
@@ -677,7 +677,7 @@ export function Checkout() {
                     {[
                       { id: 'mpesa', icon: Smartphone, bg: 'bg-success', label: 'M-Pesa', desc: 'Pay via M-Pesa', enabled: settings.mpesaEnabled },
                       { id: 'card', icon: CreditCard, bg: 'bg-primary', label: 'Credit/Debit Card', desc: 'Visa, Mastercard', enabled: settings.cardEnabled },
-                      { id: 'bank', icon: Building2, bg: 'bg-accent', label: 'Bank Transfer', desc: 'Direct bank transfer', enabled: settings.bankTransferEnabled },
+                      { id: 'bank', icon: Building2, bg: 'bg-slate-600', label: 'Bank Transfer', desc: 'Direct bank transfer', enabled: settings.bankTransferEnabled },
                     ].filter((p) => p.enabled).map(({ id, icon: Icon, bg, label, desc }) => (
                       <button key={id} type="button" role="radio" aria-checked={selectedPayment === id} aria-label={label} onClick={() => setSelectedPayment(id)}
                         className={`w-full flex items-center gap-4 p-4 rounded-lg border transition-all ${selectedPayment === id ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground'}`}>
@@ -747,14 +747,16 @@ export function Checkout() {
                       <Clock className={`w-5 h-5 ${paymentType === 'later' ? 'text-primary' : 'text-muted-foreground'}`} />
                       <div className="text-left">
                         <p className="font-medium text-sm">Pay Later</p>
-                        <p className="text-xs text-muted-foreground">Pay within 24 hours</p>
+                        <p className="text-xs text-muted-foreground">Reserve 24 hrs to pay</p>
                       </div>
                       {paymentType === 'later' && <Check className="w-4 h-4 text-primary ml-auto" />}
                     </button>
                   </div>
                   {paymentType === 'later' && (
                     <p className="text-xs text-muted-foreground mt-3">
-                      Stock will be reserved for 24 hours. Complete payment before the deadline to avoid order cancellation.
+                      {selectedPayment === 'bank'
+                        ? `Stock will be reserved for 24 hours. Complete the ${settings.bankTransferDeadlineHours || 72}-hour bank transfer before the deadline to avoid order cancellation.`
+                        : 'Stock will be reserved for 24 hours. Complete payment before the deadline to avoid order cancellation.'}
                     </p>
                   )}
                 </div>

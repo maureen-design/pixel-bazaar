@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, Scale } from 'lucide-react';
+import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
@@ -412,7 +412,7 @@ export function ProductDetail() {
               to={`/compare?ids=${encodeURIComponent(product.id)}`}
               className="inline-flex items-center gap-1.5 mt-4 text-sm text-primary hover:underline"
             >
-              <Scale className="w-4 h-4" />
+              <ArrowLeftRight className="w-4 h-4" />
               Compare this product with others
             </Link>
           </div>

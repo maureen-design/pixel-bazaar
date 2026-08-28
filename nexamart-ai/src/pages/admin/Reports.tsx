@@ -222,8 +222,8 @@ export function AdminReports() {
 
   const statCards = [
     { icon: DollarSign, label: 'Total Revenue', value: formatPrice(data.totalRevenue), color: 'emerald', delay: 0.1 },
-    { icon: ShoppingCart, label: 'Total Orders', value: data.totalOrders, color: 'blue', delay: 0.2 },
-    { icon: Users, label: 'Total Users', value: data.totalUsers, color: 'green', delay: 0.3 },
+    { icon: ShoppingCart, label: 'Total Orders', value: data.totalOrders, color: 'yellow', delay: 0.2 },
+    { icon: Users, label: 'Total Users', value: data.totalUsers, color: 'blue', delay: 0.3 },
     { icon: Package, label: 'Total Products', value: data.totalProducts, color: 'purple', delay: 0.4 },
   ];
 

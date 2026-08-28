@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, Shield, Store, LogOut, Menu, X, ArrowLeft, Tag, MessageSquare, ClipboardList, Activity, FolderOpen, LineChart, Bell, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Users, Package, ShoppingCart, Settings, Shield, Store, LogOut, Menu, X, ArrowLeft, Tag, Boxes, Activity, FolderOpen, LineChart, Bell, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -27,7 +27,7 @@ const navSections: NavSection[] = [
       { path: '/admin/users', icon: Users, label: 'Users' },
       { path: '/admin/products', icon: Package, label: 'Products' },
       { path: '/admin/categories', icon: FolderOpen, label: 'Categories' },
-      { path: '/admin/inventory', icon: ClipboardList, label: 'Inventory' },
+      { path: '/admin/inventory', icon: Boxes, label: 'Inventory' },
     ],
   },
   {
@@ -35,7 +35,7 @@ const navSections: NavSection[] = [
     items: [
       { path: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
       { path: '/admin/coupons', icon: Tag, label: 'Coupons' },
-      { path: '/admin/reviews', icon: MessageSquare, label: 'Reviews' },
+      { path: '/admin/reviews', icon: Star, label: 'Reviews' },
     ],
   },
   {
@@ -248,8 +248,8 @@ function NotificationBell({ counts, total, notifOpen, setNotifOpen, notifRef }: 
                       onClick={() => setNotifOpen(false)}
                       className="flex items-start gap-3 p-4 hover:bg-muted/50 transition-colors border-b border-border"
                     >
-                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Store className="w-4 h-4 text-blue-500" />
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Store className="w-4 h-4 text-primary" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium">Pending vendor applications</p>
@@ -263,8 +263,8 @@ function NotificationBell({ counts, total, notifOpen, setNotifOpen, notifRef }: 
                       onClick={() => setNotifOpen(false)}
                       className="flex items-start gap-3 p-4 hover:bg-muted/50 transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                      <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <AlertTriangle className="w-4 h-4 text-warning" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium">Low stock alerts</p>

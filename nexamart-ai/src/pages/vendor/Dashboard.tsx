@@ -116,7 +116,7 @@ export function VendorDashboard() {
       case 'processing':
         return 'bg-primary/20 text-primary';
       case 'shipped':
-        return 'bg-accent/20 text-accent-foreground';
+        return 'bg-ai/20 text-ai';
       case 'delivered':
         return 'bg-success/20 text-success';
       case 'cancelled':

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Star, Trash2, Check, EyeOff, MessageSquare, Inbox, Eye } from 'lucide-react';
+import { Search, Star, Trash2, Check, EyeOff, Inbox, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -173,7 +173,7 @@ export function AdminReviews() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-                        <MessageSquare className="w-5 h-5 text-primary" />
+                        <Star className="w-5 h-5 text-primary" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -189,7 +189,7 @@ export function AdminReviews() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {r.is_hidden ? <Badge variant="destructive">Hidden</Badge>
+                      {r.is_hidden ? <Badge variant="secondary">Hidden</Badge>
                       : r.is_approved ? <Badge variant="default">Approved</Badge>
                       : <Badge variant="secondary">Pending</Badge>}
                       {!r.is_approved && !r.is_hidden && (

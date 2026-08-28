@@ -118,7 +118,7 @@ export function AdminOrders() {
   const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
 
   const getStatusColor = (s: string) => {
-    const map: Record<string, string> = { pending: 'bg-warning/20 text-warning', processing: 'bg-primary/20 text-primary', shipped: 'bg-accent/20 text-accent-foreground', delivered: 'bg-success/20 text-success', cancelled: 'bg-destructive/20 text-destructive' };
+    const map: Record<string, string> = { pending: 'bg-warning/20 text-warning', processing: 'bg-primary/20 text-primary', shipped: 'bg-ai/20 text-ai', delivered: 'bg-success/20 text-success', cancelled: 'bg-destructive/20 text-destructive' };
     return map[s] || 'bg-muted text-muted-foreground';
   };
 

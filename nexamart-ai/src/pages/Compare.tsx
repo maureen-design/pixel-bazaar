@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useCompareProducts } from '../hooks/useProducts';
 import type { Product } from '../types';
 import { ProductSelector } from '../components/ai/ProductSelector';
-import { Loader2, Sparkles, Check, Scale, Minus } from 'lucide-react';
+import { Loader2, Sparkles, Check, ArrowLeftRight, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CompareResult {
@@ -96,7 +96,7 @@ export function Compare() {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex items-center gap-3 mb-2">
-          <Scale className="w-7 h-7 text-primary" />
+          <ArrowLeftRight className="w-7 h-7 text-primary" />
           <h1 className="text-3xl font-bold">Compare Products</h1>
         </div>
         <p className="text-muted-foreground mb-8">

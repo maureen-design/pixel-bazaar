@@ -14,6 +14,8 @@ import { AnimatePresence, motion } from 'motion/react';
 
 const PAGE_SIZE = 15;
 
+const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
+
 export function AdminVendors() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,7 +278,7 @@ export function AdminVendors() {
                           <Badge variant={v.is_verified ? 'default' : 'secondary'}>{v.is_verified ? 'Approved' : 'Pending'}</Badge>
                         </td>
                         <td className="p-4">{v.rating || '-'}</td>
-                        <td className="p-4">{v.total_sales != null ? `$${Number(v.total_sales).toLocaleString()}` : '-'}</td>
+                        <td className="p-4">{v.total_sales != null ? formatPrice(v.total_sales) : '-'}</td>
                         <td className="p-4 text-muted-foreground">{formatDate(v.created_at)}</td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -327,7 +329,7 @@ export function AdminVendors() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Owner:</span> <span className="text-foreground ml-2">{selectedVendor.profiles?.full_name}</span></div>
                 <div><span className="text-muted-foreground">Rating:</span> <span className="text-foreground ml-2">{selectedVendor.rating || 'N/A'}</span></div>
-                <div><span className="text-muted-foreground">Total Sales:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales != null ? `$${Number(selectedVendor.total_sales).toLocaleString()}` : 'N/A'}</span></div>
+                <div><span className="text-muted-foreground">Total Sales:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales != null ? formatPrice(selectedVendor.total_sales) : 'N/A'}</span></div>
                 <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedVendor.is_verified ? 'default' : 'secondary'} className="ml-2">{selectedVendor.is_verified ? 'Approved' : 'Pending'}</Badge></div>
                 <div><span className="text-muted-foreground">Joined:</span> <span className="text-foreground ml-2">{formatDate(selectedVendor.created_at)}</span></div>
               </div>

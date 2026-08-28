@@ -150,7 +150,7 @@ export function VendorOrders() {
     switch (status) {
       case 'pending': return 'bg-warning/20 text-warning';
       case 'processing': return 'bg-primary/20 text-primary';
-      case 'shipped': return 'bg-accent/20 text-accent-foreground';
+      case 'shipped': return 'bg-ai/20 text-ai';
       case 'delivered': return 'bg-success/20 text-success';
       case 'cancelled': return 'bg-destructive/20 text-destructive';
       default: return 'bg-muted text-muted-foreground';

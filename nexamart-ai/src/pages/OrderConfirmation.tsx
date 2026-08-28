@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Package, Truck, MapPin, Calendar, ShoppingCart, Smartphone, Clock, XCircle, Zap, Store, AlertTriangle, Phone, CreditCard, Check, Building2 } from 'lucide-react';
+import { CheckCircle2, Package, Truck, MapPin, Calendar, Smartphone, Clock, XCircle, Zap, Store, AlertTriangle, Phone, CreditCard, Check, Building2, ShoppingBag } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -278,7 +278,11 @@ export function OrderConfirmation() {
         {/* Success Header */}
         <div className="text-center mb-8">
           <motion.div
-            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-success/10 border border-success/20 mb-4"
+            className={`inline-flex items-center justify-center w-20 h-20 rounded-full border mb-4 ${
+              isBankPending ? 'bg-accent/10 border-accent/20'
+              : order.payment_type === 'later' ? 'bg-warning/10 border-warning/20'
+              : 'bg-success/10 border-success/20'
+            }`}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 200, damping: 15 }}
@@ -643,7 +647,7 @@ export function OrderConfirmation() {
         <div className="flex flex-col sm:flex-row gap-4">
           <Link to="/" className="flex-1">
             <Button className="w-full">
-              <ShoppingCart className="h-4 w-4 mr-2" />
+              <ShoppingBag className="h-4 w-4 mr-2" />
               Continue Shopping
             </Button>
           </Link>

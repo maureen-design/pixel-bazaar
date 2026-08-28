@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Activity, Download, Filter, ClipboardList } from 'lucide-react';
+import { Search, Activity, Download, RefreshCw, ClipboardList } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -163,7 +163,7 @@ export function AdminActivityLogs() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={fetchLogs} className="gap-2"><Filter className="w-4 h-4" /> Refresh</Button>
+        <Button variant="outline" onClick={fetchLogs} className="gap-2"><RefreshCw className="w-4 h-4" /> Refresh</Button>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">

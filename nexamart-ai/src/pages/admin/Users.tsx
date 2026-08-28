@@ -150,8 +150,8 @@ export function AdminUsers() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString();
 
   const getRoleVariant = (role: string) => {
-    if (role === 'admin') return 'destructive' as const;
-    if (role === 'vendor') return 'default' as const;
+    if (role === 'admin') return 'default' as const;
+    if (role === 'vendor') return 'outline' as const;
     return 'secondary' as const;
   };
 
@@ -250,9 +250,9 @@ export function AdminUsers() {
             exit={{ opacity: 0, y: -10, height: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <Card className="bg-blue-500/10 border-blue-500/30 p-4">
+            <Card className="bg-primary/10 border-primary/30 p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <span className="text-sm font-medium text-blue-400">
+                <span className="text-sm font-medium text-primary">
                   {selectedIds.size} user{selectedIds.size > 1 ? 's' : ''} selected
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">

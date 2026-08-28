@@ -114,7 +114,8 @@ export function VendorAnalytics() {
         supabase
           .from('products')
           .select('id, name')
-          .eq('vendor_id', vendor.id),
+          .eq('vendor_id', vendor.id)
+          .eq('status', 'active'),
       ]);
 
       const orders = currentOrdersResult.data || [];

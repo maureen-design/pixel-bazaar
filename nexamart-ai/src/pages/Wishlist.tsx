@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Heart, X, Star, StarHalf, ShoppingCart } from 'lucide-react';
+import { Heart, X, Star, StarHalf, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
@@ -103,7 +103,7 @@ export function Wishlist() {
             ) : (
               <Link to="/">
                 <Button>
-                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  <ShoppingBag className="w-4 h-4 mr-2" />
                   Continue Shopping
                 </Button>
               </Link>
@@ -121,7 +121,7 @@ export function Wishlist() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
-          <Heart className="w-7 h-7 text-destructive" />
+          <Heart className="w-7 h-7 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">
             My Wishlist ({wishlistItems.length})
           </h1>
