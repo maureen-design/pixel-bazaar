@@ -24,26 +24,24 @@ export function PasswordInput({
   const [show, setShow] = useState(false);
 
   return (
-    <div className="flex items-start gap-2">
-      <div className="flex-1">
-        <Input
-          label={label}
-          type={show ? 'text' : 'password'}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          className="pr-10"
-          error={error}
-          required={required}
-        />
-      </div>
+    <div className="relative">
+      <Input
+        label={label}
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className="pr-10"
+        error={error}
+        required={required}
+      />
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
         aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
         aria-pressed={show}
-        className="mt-[27px] p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+        className="absolute right-2 top-[38px] p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors"
       >
         {show ? (
           <EyeOff aria-hidden="true" className="w-4 h-4" />

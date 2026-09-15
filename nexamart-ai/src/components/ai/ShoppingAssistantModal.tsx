@@ -178,7 +178,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
       setSummary(data.data.summary || '');
       setStep('results');
     } catch (err: any) {
-      toast.error('AI assistant is unavailable right now. Try again later.');
+      toast.error('Nexa is unavailable right now. Try again later.');
       setStep('question');
     }
   };
@@ -198,7 +198,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
       <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold">AI Shopping Assistant</h2>
+          <h2 className="text-lg font-semibold">Nexa</h2>
         </div>
 
         {/* Progress bar */}
@@ -213,7 +213,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
           {step === 'category' && (
             <div>
               <p className="text-3xl font-bold mb-1">What are you shopping for?</p>
-              <p className="text-muted-foreground mb-4">Pick a category and I'll ask a few questions to find the perfect match.</p>
+              <p className="text-muted-foreground mb-4">Pick a category and I'll find the perfect match for you.</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <button
                   onClick={() => selectCategory(null)}

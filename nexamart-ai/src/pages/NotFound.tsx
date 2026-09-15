@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { FileQuestion, ShoppingCart, Search } from 'lucide-react';
+import { FileQuestion, Home, Search } from 'lucide-react';
 import { buttonVariants } from '../components/ui/button';
 
 export function NotFound() {
@@ -15,7 +15,7 @@ export function NotFound() {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link to="/" className={buttonVariants()}>
-            <ShoppingCart className="w-4 h-4 mr-2" />
+            <Home className="w-4 h-4 mr-2" />
             Back to Home
           </Link>
           <Link to="/search" className={buttonVariants({ variant: 'outline' })}>

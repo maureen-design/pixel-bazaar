@@ -9,6 +9,7 @@ import { PasswordRequirements } from '../../components/ui/PasswordRequirements';
 import { meetsAllRequirements, validateFullName } from '../../utils/passwordValidation';
 import { toast } from 'sonner';
 import { useSettings } from '../../hooks/useSettings';
+import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
 
 export function Signup() {
   const [email, setEmail] = useState('');
@@ -58,6 +59,13 @@ export function Signup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+
+    const rateLimitKey = `signup:${email.trim().toLowerCase()}`;
+    if (!checkRateLimit(rateLimitKey, 3, 300000)) { // 3 attempts per 5 minutes for signup
+      const remaining = getRemainingAttempts(rateLimitKey, 3);
+      toast.error(`Too many signup attempts. Please try again later. (${remaining} attempts remaining)`);
+      return;
+    }
 
     setLoading(true);
     try {

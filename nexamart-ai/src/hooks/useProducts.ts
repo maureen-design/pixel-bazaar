@@ -54,7 +54,9 @@ export function useProducts() {
   return { products, loading, error };
 }
 
-export function useFeaturedProducts(categoryId?: string | null, page: number = 1, limit: number = 12) {
+export type SortOption = 'rating' | 'price_asc' | 'price_desc' | 'newest';
+
+export function useFeaturedProducts(categoryId?: string | null, page: number = 1, limit: number = 12, sortBy: SortOption = 'rating') {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +87,25 @@ export function useFeaturedProducts(categoryId?: string | null, page: number = 1
           query = query.eq('category_id', categoryId);
         }
 
+        // Apply sorting
+        switch (sortBy) {
+          case 'price_asc':
+            query = query.order('price', { ascending: true });
+            break;
+          case 'price_desc':
+            query = query.order('price', { ascending: false });
+            break;
+          case 'newest':
+            query = query.order('created_at', { ascending: false });
+            break;
+          case 'rating':
+          default:
+            query = query.order('rating', { ascending: false });
+            break;
+        }
+
         const offset = (page - 1) * limit;
-        const { data, error, count } = await query
-          .order('rating', { ascending: false })
-          .range(offset, offset + limit - 1);
+        const { data, error, count } = await query.range(offset, offset + limit - 1);
 
         if (error) throw error;
 
@@ -109,7 +126,7 @@ export function useFeaturedProducts(categoryId?: string | null, page: number = 1
     }
 
     fetchFeatured();
-  }, [categoryId, page, limit]);
+  }, [categoryId, page, limit, sortBy]);
 
   return { products, loading, error, totalCount };
 }
@@ -309,4 +326,54 @@ export function useCompareProducts(searchTerm: string, selectedIds: string[], li
   }, [searchTerm, selectedIdsKey, limit]);
 
   return { products, loading, error };
+}
+
+export function usePopularPicks(limit = 8) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchPicks() {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select(`
+            *,
+            vendors!inner (id, store_name, store_logo, country),
+            categories!inner (id, name, slug)
+          `)
+          .eq('status', 'active')
+          .gt('rating', 0)
+          .order('rating', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(limit);
+
+        if (error) throw error;
+
+        if (!cancelled) {
+          setProducts(
+            (data || []).map((product: any) => ({
+              ...product,
+              images: product.images && product.images.length > 0
+                ? product.images.map((img: string) =>
+                    img.startsWith('http') ? img : `${STORAGE_URL}/${img}`
+                  )
+                : [PLACEHOLDER_IMAGE],
+            }))
+          );
+        }
+      } catch {
+        if (!cancelled) setProducts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchPicks();
+    return () => { cancelled = true; };
+  }, [limit]);
+
+  return { products, loading };
 }

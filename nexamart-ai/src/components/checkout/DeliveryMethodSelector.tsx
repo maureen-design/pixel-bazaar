@@ -6,18 +6,9 @@ import {
   type DeliveryMethod,
   type PlatformSettings,
 } from '../../lib/settings';
+import { addBusinessDays } from '../../utils/formatUtils';
 
 export type { DeliveryMethod } from '../../lib/settings';
-
-function addBusinessDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  let added = 0;
-  while (added < days) {
-    result.setDate(result.getDate() + 1);
-    if (result.getDay() !== 0 && result.getDay() !== 6) added++;
-  }
-  return result;
-}
 
 function formatDateShort(date: Date): string {
   return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });

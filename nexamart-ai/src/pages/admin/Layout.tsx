@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, ShoppingCart, Settings, Shield, Store, LogOut, Menu, X, ArrowLeft, Tag, Boxes, Activity, FolderOpen, LineChart, Bell, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Settings, Store, LogOut, Menu, X, ArrowLeft, Tag, Boxes, Activity, FolderOpen, LineChart, Bell, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useSettings } from '../../hooks/useSettings';
 import { supabase } from '../../lib/supabaseClient';
+import { Monogram } from '../../components/Monogram';
 
 interface NavSection {
   title: string;
@@ -33,7 +34,7 @@ const navSections: NavSection[] = [
   {
     title: 'Orders & Sales',
     items: [
-      { path: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
+      { path: '/admin/orders', icon: Package, label: 'Orders' },
       { path: '/admin/coupons', icon: Tag, label: 'Coupons' },
       { path: '/admin/reviews', icon: Star, label: 'Reviews' },
     ],
@@ -122,7 +123,7 @@ export function AdminLayout() {
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <Shield className="w-6 h-6 text-primary" />
+          <Monogram className="w-6 h-6" />
           <span className="font-semibold">{settings.siteName} Admin</span>
         </div>
         <div className="flex items-center gap-2">
@@ -292,7 +293,7 @@ function SidebarContent({ profile, location, onSignOut, onClose, siteName, colla
       <div className={`border-b border-border ${collapsed ? 'p-3' : 'px-6 py-5'}`}>
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           <div className={`flex items-center ${collapsed ? '' : 'gap-3'}`}>
-            <Shield className="w-8 h-8 text-primary flex-shrink-0" />
+            <Monogram className="w-8 h-8" />
             {!collapsed && (
               <div className="min-w-0">
                 <h1 className="font-bold text-lg truncate">{siteName}</h1>

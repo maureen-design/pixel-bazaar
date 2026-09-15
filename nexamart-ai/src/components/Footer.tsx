@@ -1,14 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-
-function getMonogram(siteName: string): string {
-  const words = siteName
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .split(/\s+/)
-    .filter(Boolean);
-  const initials = ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase();
-  return initials || 'NM';
-}
+import { Monogram } from './Monogram';
 
 const SHOP = [
   { to: '/', label: 'Home' },
@@ -33,7 +25,7 @@ const COMPANY = [
 function PaymentBadge({ label, color }: { label: string; color: string }) {
   return (
     <span
-      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border border-gray-200 bg-white shadow-sm"
+      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border border-border bg-card shadow-sm"
       style={{ color }}
     >
       {label}
@@ -51,9 +43,7 @@ export function Footer() {
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-gradient-to-br from-brand to-brand-dark rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">{getMonogram(settings.siteName)}</span>
-              </div>
+              <Monogram className="w-8 h-8" />
               <span className="text-xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
                 {settings.siteName}
               </span>
@@ -63,8 +53,8 @@ export function Footer() {
           </div>
 
           {/* Shop */}
-          <div>
-            <h3 className="text-white font-semibold mb-4">Shop</h3>
+          <section aria-labelledby="footer-shop">
+            <h3 id="footer-shop" className="text-white font-semibold mb-4">Shop</h3>
             <ul className="space-y-2">
               {SHOP.map((link) => (
                 <li key={link.to + link.label}>
@@ -74,11 +64,11 @@ export function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
 
           {/* Account */}
-          <div>
-            <h3 className="text-white font-semibold mb-4">Account</h3>
+          <section aria-labelledby="footer-account">
+            <h3 id="footer-account" className="text-white font-semibold mb-4">Account</h3>
             <ul className="space-y-2">
               {ACCOUNT.map((link) => (
                 <li key={link.to}>
@@ -88,11 +78,11 @@ export function Footer() {
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
 
           {/* Company + Payment */}
-          <div>
-            <h3 className="text-white font-semibold mb-4">Company</h3>
+          <section aria-labelledby="footer-company">
+            <h3 id="footer-company" className="text-white font-semibold mb-4">Company</h3>
             <ul className="space-y-2 mb-6">
               {COMPANY.map((link) => (
                 <li key={link.to}>
@@ -109,7 +99,7 @@ export function Footer() {
               {settings.cardEnabled && <PaymentBadge label="Mastercard" color="#EB001B" />}
               {settings.bankTransferEnabled && <PaymentBadge label="Bank" color="#A78BFA" />}
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </footer>

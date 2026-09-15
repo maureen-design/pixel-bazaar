@@ -15,7 +15,8 @@ const PRODUCT_TYPES = [
   'smartphone', 'laptop', 'tablet', 'smartwatch', 'headphones', 'speaker', 'keyboard',
   'mouse', 'monitor', 'gaming_console', 'gaming_accessory', 'camera', 'storage', 'charger',
   'tshirt', 'hoodie', 'dress', 'blouse', 'blazer', 'jacket', 'trousers', 'jeans', 'sneakers',
-  'heels', 'formal_shoes', 'sandals', 'handbag', 'footwear', 'fragrance', 'skincare', 'makeup',
+  'heels', 'formal_shoes', 'sandals', 'boots', 'loafers', 'handmade_footwear', 'handbag',
+  'fragrance', 'skincare', 'makeup',
   'jewelry', 'craft', 'basket', 'furniture', 'lighting', 'organization', 'football',
   'basketball', 'yoga', 'fitness', 'car_accessory', 'rc_vehicle', 'building_blocks',
   'plush_toy', 'puzzle', 'fiction', 'self_help', 'education', 'childrens_book',
@@ -100,7 +101,14 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Generation failed');
 
-      setFormData(prev => ({ ...prev, description: data.data.description }));
+      const raw = data.data.description as string;
+      const clean = raw
+        .replace(/\*\*/g, '')
+        .replace(/^#+\s*/gm, '')
+        .replace(/^- /gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      setFormData(prev => ({ ...prev, description: clean }));
       setAiModalOpen(false);
       toast.success('Description generated!');
     } catch (err: any) {
@@ -259,6 +267,17 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
           .eq('id', product.id);
 
         if (error) throw error;
+        // Send low stock alert if stock is <= 5
+        if (productData.stock_quantity <= 5 && vendor?.id) {
+          supabase.functions.invoke('send-low-stock-alert', {
+            body: {
+              product_id: product.id,
+              product_name: productData.name,
+              stock_quantity: productData.stock_quantity,
+              vendor_id: vendor.id,
+            },
+          }).catch(() => {});
+        }
         toast.success('Product updated successfully');
       } else {
         // Create new product

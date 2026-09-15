@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Heart, X, Star, StarHalf, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWishlist } from '../context/WishlistContext';
@@ -9,6 +9,7 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
+import { formatPrice } from '../config/pricing';
 
 function renderStars(rating: number) {
   if (rating <= 0) return null;
@@ -32,13 +33,7 @@ export function Wishlist() {
   const { wishlistItems, isLoading, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { user } = useAuth();
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
+  const navigate = useNavigate();
 
   const handleAddToCart = async (productId: string, inStock: boolean) => {
     if (!inStock) {
@@ -47,7 +42,7 @@ export function Wishlist() {
     }
     await addToCart(productId, 1);
     toast.success('Added to cart', {
-      action: { label: 'View Cart', onClick: () => window.location.href = '/cart' },
+      action: { label: 'View Cart', onClick: () => navigate('/cart') },
     });
   };
 

@@ -1,56 +1,68 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { CompareProvider } from './context/CompareContext';
+import { CompareBar } from './components/CompareBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { VendorProtectedRoute } from './components/VendorProtectedRoute';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
-import { Login } from './pages/auth/Login';
-import { Signup } from './pages/auth/Signup';
-import { ForgotPassword } from './pages/auth/ForgotPassword';
-import { ResetPassword } from './pages/auth/ResetPassword';
-import { AuthCallback } from './pages/auth/AuthCallback';
-import { Homepage } from './pages/Homepage';
-import { ProductDetail } from './pages/ProductDetail';
-import { Cart } from './pages/Cart';
-import { Checkout } from './pages/Checkout';
-import { OrderConfirmation } from './pages/OrderConfirmation';
-import { VendorApply } from './pages/vendor/Apply';
-import { VendorLayout } from './pages/vendor/Layout';
-import { VendorDashboard } from './pages/vendor/Dashboard';
-import { VendorProducts } from './pages/vendor/Products';
-import { VendorOrders } from './pages/vendor/Orders';
-import { VendorAnalytics } from './pages/vendor/Analytics';
-import { VendorSettings } from './pages/vendor/Settings';
-import { Profile } from './pages/Profile';
-import { Orders } from './pages/Orders';
-import { Wishlist } from './pages/Wishlist';
-import { Search } from './pages/Search';
-import { Settings } from './pages/Settings';
-import { Compare } from './pages/Compare';
-import { About } from './pages/About';
-import { Contact } from './pages/Contact';
-import { Privacy } from './pages/Privacy';
-import { Terms } from './pages/Terms';
-import { NotFound } from './pages/NotFound';
 import { ScrollToTop } from './components/ScrollToTop';
-import { AdminLayout } from './pages/admin/Layout';
-import { AdminDashboard } from './pages/admin/Dashboard';
-import { AdminVendors } from './pages/admin/Vendors';
-import { AdminUsers } from './pages/admin/Users';
-import { AdminProducts } from './pages/admin/Products';
-import { AdminCategories } from './pages/admin/Categories';
-import { AdminOrders } from './pages/admin/Orders';
-import { AdminReports } from './pages/admin/Reports';
-import { AdminSettings } from './pages/admin/Settings';
-import { AdminCoupons } from './pages/admin/Coupons';
-import { AdminReviews } from './pages/admin/Reviews';
-import { AdminInventory } from './pages/admin/Inventory';
-import { AdminActivityLogs } from './pages/admin/ActivityLogs';
 import { useSettings } from './hooks/useSettings';
+
+const Login = lazy(() => import('./pages/auth/Login').then(m => ({ default: m.Login })));
+const Signup = lazy(() => import('./pages/auth/Signup').then(m => ({ default: m.Signup })));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword').then(m => ({ default: m.ResetPassword })));
+const AuthCallback = lazy(() => import('./pages/auth/AuthCallback').then(m => ({ default: m.AuthCallback })));
+const AuthRedirect = lazy(() => import('./pages/auth/AuthRedirect').then(m => ({ default: m.AuthRedirect })));
+const Homepage = lazy(() => import('./pages/Homepage').then(m => ({ default: m.Homepage })));
+const ProductDetail = lazy(() => import('./pages/ProductDetail').then(m => ({ default: m.ProductDetail })));
+const Cart = lazy(() => import('./pages/Cart').then(m => ({ default: m.Cart })));
+const Checkout = lazy(() => import('./pages/Checkout').then(m => ({ default: m.Checkout })));
+const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation').then(m => ({ default: m.OrderConfirmation })));
+const VendorApply = lazy(() => import('./pages/vendor/Apply').then(m => ({ default: m.VendorApply })));
+const VendorLayout = lazy(() => import('./pages/vendor/Layout').then(m => ({ default: m.VendorLayout })));
+const VendorDashboard = lazy(() => import('./pages/vendor/Dashboard').then(m => ({ default: m.VendorDashboard })));
+const VendorProducts = lazy(() => import('./pages/vendor/Products').then(m => ({ default: m.VendorProducts })));
+const VendorOrders = lazy(() => import('./pages/vendor/Orders').then(m => ({ default: m.VendorOrders })));
+const VendorAnalytics = lazy(() => import('./pages/vendor/Analytics').then(m => ({ default: m.VendorAnalytics })));
+const VendorSettings = lazy(() => import('./pages/vendor/Settings').then(m => ({ default: m.VendorSettings })));
+const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
+const Wishlist = lazy(() => import('./pages/Wishlist').then(m => ({ default: m.Wishlist })));
+const Search = lazy(() => import('./pages/Search').then(m => ({ default: m.Search })));
+const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const Compare = lazy(() => import('./pages/Compare').then(m => ({ default: m.Compare })));
+const About = lazy(() => import('./pages/About').then(m => ({ default: m.About })));
+const Contact = lazy(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
+const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
+const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
+const NotFound = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+const AdminLayout = lazy(() => import('./pages/admin/Layout').then(m => ({ default: m.AdminLayout })));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard').then(m => ({ default: m.AdminDashboard })));
+const AdminVendors = lazy(() => import('./pages/admin/Vendors').then(m => ({ default: m.AdminVendors })));
+const AdminUsers = lazy(() => import('./pages/admin/Users').then(m => ({ default: m.AdminUsers })));
+const AdminProducts = lazy(() => import('./pages/admin/Products').then(m => ({ default: m.AdminProducts })));
+const AdminCategories = lazy(() => import('./pages/admin/Categories').then(m => ({ default: m.AdminCategories })));
+const AdminOrders = lazy(() => import('./pages/admin/Orders').then(m => ({ default: m.AdminOrders })));
+const AdminReports = lazy(() => import('./pages/admin/Reports').then(m => ({ default: m.AdminReports })));
+const AdminSettings = lazy(() => import('./pages/admin/Settings').then(m => ({ default: m.AdminSettings })));
+const AdminCoupons = lazy(() => import('./pages/admin/Coupons').then(m => ({ default: m.AdminCoupons })));
+const AdminReviews = lazy(() => import('./pages/admin/Reviews').then(m => ({ default: m.AdminReviews })));
+const AdminInventory = lazy(() => import('./pages/admin/Inventory').then(m => ({ default: m.AdminInventory })));
+const AdminActivityLogs = lazy(() => import('./pages/admin/ActivityLogs').then(m => ({ default: m.AdminActivityLogs })));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function SiteIdentity() {
   const { settings } = useSettings();
@@ -76,22 +88,26 @@ function App() {
       <AuthProvider>
         <CartProvider>
           <WishlistProvider>
+          <CompareProvider>
           <SiteIdentity />
           <ScrollToTop />
           <Toaster position="top-right" richColors />
+          <CompareBar />
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-card focus:text-foreground focus:px-4 focus:py-2 focus:rounded-lg focus:ring-2 focus:ring-primary"
           >
             Skip to content
           </a>
-          <main id="main-content" className="outline-none">
+           <main id="main-content" className="outline-none">
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/reset-password" element={<ResetPassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/auth/redirect" element={<AuthRedirect />} />
             {/* Public storefront */}
             <Route path="/" element={<Homepage />} />
             <Route path="/search" element={<Search />} />
@@ -108,39 +124,126 @@ function App() {
               <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/orders" element={<Orders />} />
+              <Route path="/orders/:orderNumber" element={<Orders />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/vendor/apply" element={<VendorApply />} />
               <Route element={<AdminProtectedRoute />}>
-                <Route path="/admin" element={<AdminLayout />}>
-                  <Route index element={<AdminDashboard />} />
-                  <Route path="dashboard" element={<AdminDashboard />} />
-                  <Route path="vendors" element={<AdminVendors />} />
-                  <Route path="users" element={<AdminUsers />} />
-                  <Route path="products" element={<AdminProducts />} />
-                  <Route path="categories" element={<AdminCategories />} />
-                  <Route path="orders" element={<AdminOrders />} />
-                  <Route path="reports" element={<AdminReports />} />
-                  <Route path="settings" element={<AdminSettings />} />
-                  <Route path="coupons" element={<AdminCoupons />} />
-                  <Route path="reviews" element={<AdminReviews />} />
-                  <Route path="inventory" element={<AdminInventory />} />
-                  <Route path="activity-logs" element={<AdminActivityLogs />} />
+                <Route path="/admin" element={
+                  <ErrorBoundary>
+                    <AdminLayout />
+                  </ErrorBoundary>
+                }>
+                  <Route index element={
+                    <ErrorBoundary>
+                      <AdminDashboard />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="dashboard" element={
+                    <ErrorBoundary>
+                      <AdminDashboard />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="vendors" element={
+                    <ErrorBoundary>
+                      <AdminVendors />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="users" element={
+                    <ErrorBoundary>
+                      <AdminUsers />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="products" element={
+                    <ErrorBoundary>
+                      <AdminProducts />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="categories" element={
+                    <ErrorBoundary>
+                      <AdminCategories />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="orders" element={
+                    <ErrorBoundary>
+                      <AdminOrders />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="reports" element={
+                    <ErrorBoundary>
+                      <AdminReports />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="settings" element={
+                    <ErrorBoundary>
+                      <AdminSettings />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="coupons" element={
+                    <ErrorBoundary>
+                      <AdminCoupons />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="reviews" element={
+                    <ErrorBoundary>
+                      <AdminReviews />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="inventory" element={
+                    <ErrorBoundary>
+                      <AdminInventory />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="activity-logs" element={
+                    <ErrorBoundary>
+                      <AdminActivityLogs />
+                    </ErrorBoundary>
+                  } />
                 </Route>
               </Route>
               <Route element={<VendorProtectedRoute />}>
-                <Route path="/vendor" element={<VendorLayout />}>
-                  <Route index element={<VendorDashboard />} />
-                  <Route path="dashboard" element={<VendorDashboard />} />
-                  <Route path="products" element={<VendorProducts />} />
-                  <Route path="orders" element={<VendorOrders />} />
-                  <Route path="analytics" element={<VendorAnalytics />} />
-                  <Route path="settings" element={<VendorSettings />} />
+                <Route path="/vendor" element={
+                  <ErrorBoundary>
+                    <VendorLayout />
+                  </ErrorBoundary>
+                }>
+                  <Route index element={
+                    <ErrorBoundary>
+                      <VendorDashboard />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="dashboard" element={
+                    <ErrorBoundary>
+                      <VendorDashboard />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="products" element={
+                    <ErrorBoundary>
+                      <VendorProducts />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="orders" element={
+                    <ErrorBoundary>
+                      <VendorOrders />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="analytics" element={
+                    <ErrorBoundary>
+                      <VendorAnalytics />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="settings" element={
+                    <ErrorBoundary>
+                      <VendorSettings />
+                    </ErrorBoundary>
+                  } />
                 </Route>
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </main>
+          </CompareProvider>
           </WishlistProvider>
         </CartProvider>
         </AuthProvider>

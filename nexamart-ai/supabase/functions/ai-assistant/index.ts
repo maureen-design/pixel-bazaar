@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 async function callGemini(prompt: string, maxOutputTokens = 500, temperature = 0.7) {
-  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
+  const model = 'gemini-3.6-flash';
   const key = Deno.env.get('GEMINI_API_KEY');
   if (!key) throw new Error('GEMINI_API_KEY not configured');
 
@@ -35,7 +35,13 @@ async function callGemini(prompt: string, maxOutputTokens = 500, temperature = 0
 
 function safeParseJSON(text: string, fallback: any) {
   try {
-    const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Strip markdown code blocks if present
+    let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    // Try to extract JSON object from the text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[0];
+    }
     return JSON.parse(cleaned);
   } catch {
     return fallback;
@@ -57,12 +63,39 @@ async function querySupabase(path: string) {
   return response.json();
 }
 
+async function verifyAuth(authHeader: string | null): Promise<{ userId: string; email: string } | null> {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey },
+    });
+    if (!resp.ok) return null;
+    const user = await resp.json();
+    return { userId: user.id, email: user.email };
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   try {
+    const authUser = await verifyAuth(req.headers.get('Authorization'));
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { action, data } = await req.json();
 
     if (action === 'parse_search') {
@@ -71,7 +104,7 @@ serve(async (req) => {
 
       const PRODUCT_TYPES = [
         'tshirt', 'hoodie', 'dress', 'blouse', 'blazer', 'jacket', 'trousers', 'jeans',
-        'sneakers', 'heels', 'formal_shoes', 'sandals', 'handbag',
+        'sneakers', 'heels', 'formal_shoes', 'sandals', 'boots', 'loafers', 'handmade_footwear', 'handbag',
         'smartphone', 'laptop', 'tablet', 'headphones', 'speaker', 'keyboard', 'mouse',
         'monitor', 'gaming_console', 'gaming_accessory', 'camera', 'smartwatch', 'storage', 'charger',
         'fiction', 'self_help', 'education', 'childrens_book',
@@ -79,7 +112,7 @@ serve(async (req) => {
         'football', 'basketball', 'yoga', 'fitness',
         'car_accessory', 'rc_vehicle', 'building_blocks', 'plush_toy', 'puzzle',
         'fragrance', 'skincare', 'makeup', 'jewelry', 'craft', 'basket',
-        'handmade_footwear', 'design_asset', 'ebook', 'online_course',
+        'design_asset', 'ebook', 'online_course',
       ].join(', ');
 
       const COLORS = [
@@ -103,9 +136,11 @@ Return ONLY valid JSON with these fields:
 Rules:
 - keywords must be ONLY the short product search terms (e.g. "running shoes"). Never repeat the whole sentence, conjunctions, price words ("under", "below", "between", "less than"), or numbers. Use null if there is no product term.
 - minPrice/maxPrice: include ONLY if the user states an explicit price (e.g. "under 10,000" -> maxPrice: 10000; "over 2000" -> minPrice: 2000; "between 1000 and 5000" -> both). Plain numbers without a qualifier are NOT a price range; return null for minPrice/maxPrice in that case. Use numbers only, never strings with commas. NEVER hallucinate price values.
-- productType: choose the single best matching controlled vocabulary value from the query's product word (e.g. "shoes" -> sneakers or formal_shoes, "laptops" -> laptop, "phones" -> smartphone, "hoodies" -> hoodie, "dresses" -> dress, "watch" -> smartwatch). Return null when no product type is identifiable.
+- category: If the query mentions a category name (e.g. "shoes", "electronics", "fashion"), set category to that slug. "shoes" -> shoes, "sneakers" -> shoes, "running shoes" -> shoes, "men's shoes" -> shoes, "women's shoes" -> shoes. Use the category slugs provided above.
+- productType: choose the single best matching controlled vocabulary value from the query's product word (e.g. "laptops" -> laptop, "phones" -> smartphone, "hoodies" -> hoodie, "dresses" -> dress, "watch" -> smartwatch). For shoe-related queries, use the category field instead (set category to "shoes"). Return null when no product type is identifiable and the category field is already set.
 - brand: return ONLY when the query explicitly names a brand (e.g. "samsung phones" -> Samsung, "nike shoes" -> Nike). Otherwise null. Never infer a brand from a product type.
 - color: return ONLY when the query explicitly names a color, and ONLY one of: ${COLORS} (e.g. "black shoes" -> black). Return the exact lowercase vocabulary value. Never invent colors, never return variants like "gray" (use "grey"), never return compound values. Otherwise null.
+- keywords: For shoe queries, include relevant keywords like "shoes", "footwear", "sneakers" etc. to improve text matching.
 
 Query: "${data.query}"
       `;
@@ -149,6 +184,7 @@ Write a compelling product description for the following product:
 - Target Audience: ${data.audience || 'General shoppers'}
 
 The description should be 2-3 paragraphs, SEO-friendly, and highlight the key benefits.
+Use plain text only. No markdown, no bold, no asterisks, no bullet points, no numbered lists. Just write natural sentences.
 Return only the description text, no additional commentary.
       `;
 
@@ -173,7 +209,7 @@ Return only the description text, no additional commentary.
 
       let products: any[] = [];
       try {
-        let path = 'products?select=id,name,slug,description,price,compare_price,images,rating,category_id,vendor_id&status=eq.active&order=rating.desc&limit=20';
+        let path = 'products?select=id,name,slug,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,category_id,vendor_id,categories!inner(name),vendors!inner(store_name)&status=eq.active&order=rating.desc&limit=20';
         if (category && typeof category === 'string' && category.length < 36) {
           path += `&category_id=eq.${category}`;
         }
@@ -181,7 +217,7 @@ Return only the description text, no additional commentary.
         if (budgetMax) path += `&price=lte.${budgetMax}`;
         products = await querySupabase(path);
       } catch (e) {
-        products = await querySupabase('products?select=id,name,slug,description,price,compare_price,images,rating,category_id&status=eq.active&order=rating.desc&limit=20');
+        products = await querySupabase('products?select=id,name,slug,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,category_id,vendor_id,categories!inner(name),vendors!inner(store_name)&status=eq.active&order=rating.desc&limit=20');
       }
 
       if (products.length === 0) {
@@ -191,43 +227,42 @@ Return only the description text, no additional commentary.
         );
       }
 
-      const prompt = `
-You are a friendly shopping assistant for NexaMart AI, a multi-vendor marketplace.
-A shopper is looking for a product with these needs:
+      const productList = products.slice(0, 15).map((p: any) => {
+        const catName = p.categories?.name || 'General';
+        const vendorName = p.vendors?.store_name || 'NexaMart seller';
+        const stockText = p.stock_quantity > 0 ? `In stock (${p.stock_quantity})` : 'Out of stock';
+        return `${p.id} | ${p.name} | Brand: ${p.brand || 'N/A'} | Type: ${p.product_type || 'N/A'} | Category: ${catName} | KES ${p.price} | Rating: ${p.rating || 0} | ${stockText} | Vendor: ${vendorName}`;
+      }).join('\n');
+
+      const prompt = `You are a shopping assistant for NexaMart AI. Recommend 3-5 products from the list below.
+
+SHOPPER NEEDS:
 - Category: ${category || 'Any'}
 - Use case: ${useCase || 'General'}
-- Budget: ${budgetMin ? `from ${budgetMin}` : ''} ${budgetMax ? `to ${budgetMax}` : ''}
+- Budget: ${budgetMin ? `from KES ${budgetMin}` : ''} ${budgetMax ? `to KES ${budgetMax}` : ''} ${!budgetMin && !budgetMax ? 'Any' : ''}
 - Priorities: ${priorities || 'Price and quality'}
-- Experience level: ${experienceLevel || 'General'}
 
-Here are products from our database:
-${JSON.stringify(products.slice(0, 20))}
+AVAILABLE PRODUCTS (id | name | price | rating):
+${productList}
 
-Recommend the top 3-5 products that best match the shopper's needs. Rank them by relevance.
-For each product explain:
-1. Why it's a good fit (1-2 sentences)
-2. How it matches their priorities
-3. Any trade-offs they should know about
-
-Return ONLY valid JSON with this exact structure:
+RESPOND WITH ONLY VALID JSON. No other text. No markdown. No explanation outside JSON.
 {
   "recommendations": [
     {
-      "product_id": "uuid-string",
-      "reason": "why it fits (1-2 sentences)",
-      "match_score": 95,
-      "pros": ["battery life", "performance"],
-      "cons": ["price", "weight"]
+      "product_id": "exact-id-from-list",
+      "reason": "why it fits in 1 sentence",
+      "match_score": 90,
+      "pros": ["pro1", "pro2"],
+      "cons": ["con1"]
     }
   ],
-  "summary": "1-2 sentence overall recommendation summary"
+  "summary": "1 sentence summary"
 }
-Only include product_id values from the provided list. Do not invent products.
-      `;
+Only use product_id values that appear in the list above.`;
 
       let result = '';
       try {
-        result = await callGemini(prompt, 1200);
+        result = await callGemini(prompt, 1000, 0.3);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -259,7 +294,7 @@ Only include product_id values from the provided list. Do not invent products.
       }
 
       const products: any[] = await querySupabase(
-        `products?select=id,name,description,price,images,rating&id=eq.${productId}`
+        `products?select=id,name,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,categories!inner(name),vendors!inner(store_name)&id=eq.${productId}`
       );
       if (products.length === 0) {
         return new Response(
@@ -269,20 +304,30 @@ Only include product_id values from the provided list. Do not invent products.
       }
       const product = products[0];
 
-      const prompt = `
-Explain this product in simple, beginner-friendly language:
-- Name: ${product.name}
-- Description: ${product.description}
-- Price: ${product.price}
+      const variantSummary = product.variants?.combinations?.length
+        ? `Available options: ${product.variants.combinations.map((c: any) => c.label || c.name || JSON.stringify(c)).slice(0, 5).join(', ')}`
+        : '';
+      const stockText = product.stock_quantity > 0 ? `In stock (${product.stock_quantity} available)` : 'Out of stock';
 
-Include:
-1. What it is (1 sentence)
-2. Who it's for (1 sentence)
-3. What it's good for (1-2 sentences)
-4. What to consider before buying (1 sentence)
+      const prompt = `Explain this product in simple, beginner-friendly language. Use plain text only. No markdown, no bold, no asterisks, no bullet points, no numbered lists. Just write sentences separated by line breaks.
 
-Keep it concise and friendly. Return only the explanation text.
-      `;
+Product: ${product.name}
+Brand: ${product.brand || 'Not specified'}
+Category: ${product.categories?.name || 'General'}
+Type: ${product.product_type || 'General'}
+Price: KES ${product.price}${product.compare_price ? ` (was KES ${product.compare_price})` : ''}
+Rating: ${product.rating || 'No ratings yet'}
+Stock: ${stockText}
+Vendor: ${product.vendors?.store_name || 'NexaMart seller'}
+${variantSummary ? `Variants: ${variantSummary}` : ''}
+
+Write exactly 4 short paragraphs:
+Paragraph 1: What it is — mention the brand, type, and category (1 sentence)
+Paragraph 2: Who it is for and what makes it stand out (1 sentence)
+Paragraph 3: What it is good for, including price context and any variant options (1-2 sentences)
+Paragraph 4: What to consider before buying — stock status, rating, vendor (1 sentence)
+
+Return only the plain text explanation. No extra formatting.`;
 
       let explanation = '';
       try {
@@ -311,7 +356,7 @@ Keep it concise and friendly. Return only the explanation text.
 
       const idList = productIds.join(',');
       const products: any[] = await querySupabase(
-        `products?select=id,name,description,price,compare_price,images,rating&id=in.(${idList})`
+        `products?select=id,name,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,categories!inner(name),vendors!inner(store_name)&id=in.(${idList})`
       );
 
       if (products.length < 2) {
@@ -321,29 +366,34 @@ Keep it concise and friendly. Return only the explanation text.
         );
       }
 
-      const prompt = `
-Compare these products and tell the user which one is better for what:
-${JSON.stringify(products)}
+      const productList = products.map((p: any) => {
+        const variantSummary = p.variants?.combinations?.length
+          ? `Options: ${p.variants.combinations.map((c: any) => c.label || c.name || JSON.stringify(c)).slice(0, 3).join(', ')}`
+          : 'No variants';
+        const stockText = p.stock_quantity > 0 ? `In stock (${p.stock_quantity})` : 'Out of stock';
+        return `${p.id} | ${p.name} | Brand: ${p.brand || 'N/A'} | Type: ${p.product_type || 'N/A'} | Category: ${p.categories?.name || 'N/A'} | KES ${p.price}${p.compare_price ? ` (was ${p.compare_price})` : ''} | Rating: ${p.rating || 0} | ${stockText} | Vendor: ${p.vendors?.store_name || 'N/A'} | ${variantSummary}`;
+      }).join('\n');
 
-Provide:
-1. A brief summary of the differences (1-2 sentences)
-2. Which product is better for each use case
-3. Key trade-offs to consider
+      const prompt = `Compare these products and tell the user which one is better for what. Be specific about brand, type, price, stock, and variants.
 
-Return ONLY valid JSON with this structure:
+If the products are from different categories, note that the comparison may not be directly useful and explain why.
+
+PRODUCTS:
+${productList}
+
+RESPOND WITH ONLY VALID JSON. No other text. No markdown.
 {
   "summary": "1-2 sentence overall comparison summary",
   "comparisons": [
     {
-      "use_case": "budget shopping",
-      "product_id": "uuid-string",
-      "why": "why this product wins for this use case"
+      "use_case": "e.g. budget shopping, best value, premium choice",
+      "product_id": "exact-id-from-list",
+      "why": "why this product wins for this use case, mentioning brand/type/price/stock"
     }
   ],
   "trade_offs": ["trade-off 1", "trade-off 2"]
 }
-Only use product_id values from the provided list.
-      `;
+Only use product_id values from the list above.`;
 
       let result = '';
       try {

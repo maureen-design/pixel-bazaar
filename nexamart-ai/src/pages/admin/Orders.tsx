@@ -1,16 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Package, ChevronDown, ChevronUp, CheckCircle2, XCircle, Download, Inbox, CheckSquare } from 'lucide-react';
+import { Search, Package, ChevronDown, ChevronUp, CheckCircle2, XCircle, Download, Inbox, CheckSquare, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Pagination } from '../../components/ui/pagination';
 import { OrderTimeline } from '../../components/OrderTimeline';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatShippingAddress, formatOrderDate } from '../../utils/formatUtils';
+import { formatPrice } from '../../config/pricing';
 
 const statuses = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 const PAGE_SIZE = 10;
@@ -37,6 +39,10 @@ export function AdminOrders() {
   const [bulkStatus, setBulkStatus] = useState<string | null>(null);
   const [bulkConfirmDialog, setBulkConfirmDialog] = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [cancelDialog, setCancelDialog] = useState<{ orderId: string; orderNumber: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchOrders(); }, []);
 
@@ -47,18 +53,60 @@ export function AdminOrders() {
         .select('*, profiles(full_name, email), order_items(id, quantity, product_price, products(name, images))')
         .order('created_at', { ascending: false });
       setOrders(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
   const updateStatus = async (orderId: string, status: string) => {
+    if (status === 'cancelled') {
+      const order = orders.find(o => o.id === orderId);
+      setCancelDialog({ orderId, orderNumber: order?.order_number || '' });
+      return;
+    }
     const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
     if (error) { toast.error('Failed to update status'); return; }
     toast.success(`Order status updated to ${status}`);
+    // Send status email (non-blocking)
+    supabase.functions.invoke('send-order-status-email', {
+      body: { order_id: orderId, status },
+    }).catch(() => {});
     fetchOrders();
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelDialog) return;
+    setCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancellation_reason: cancelReason.trim() || null,
+        })
+        .eq('id', cancelDialog.orderId);
+
+      if (error) throw error;
+      toast.success('Order cancelled');
+      // Send cancellation email with reason (non-blocking)
+      supabase.functions.invoke('send-order-status-email', {
+        body: {
+          order_id: cancelDialog.orderId,
+          status: 'cancelled',
+          reason: cancelReason.trim() || null,
+        },
+      }).catch(() => {});
+      setCancelDialog(null);
+      setCancelReason('');
+      fetchOrders();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel order');
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const toggleExpand = (id: string) => {
@@ -114,8 +162,6 @@ export function AdminOrders() {
       setRejecting(null);
     }
   };
-
-  const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
 
   const getStatusColor = (s: string) => {
     const map: Record<string, string> = { pending: 'bg-warning/20 text-warning', processing: 'bg-primary/20 text-primary', shipped: 'bg-ai/20 text-ai', delivered: 'bg-success/20 text-success', cancelled: 'bg-destructive/20 text-destructive' };
@@ -223,7 +269,7 @@ export function AdminOrders() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search orders..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+           <Input placeholder="Search orders by order number or customer…" aria-label="Search orders" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
@@ -283,35 +329,47 @@ export function AdminOrders() {
         )}
       </AnimatePresence>
 
-      <Card className="bg-card border-border overflow-hidden">
-        {loading ? (
-          <div className="divide-y divide-border">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
-                    <Skeleton className="w-5 h-5 rounded" />
-                    <div className="space-y-1.5">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-3 w-32" />
+      {error && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (
+        <Card className="bg-card border-border overflow-hidden">
+          {loading ? (
+            <div className="divide-y divide-border">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1">
+                      <Skeleton className="w-5 h-5 rounded" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                      <Skeleton className="h-3 w-20" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-6 w-16 rounded-full" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
-            <Inbox className="w-12 h-12" />
-            <p className="text-lg font-medium">No orders found</p>
-            <p className="text-sm">Try adjusting your filters or search term.</p>
-          </div>
-        ) : (
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+              <Inbox className="w-12 h-12" />
+              <p className="text-lg font-medium">No orders found</p>
+              <p className="text-sm">Try adjusting your filters or search term.</p>
+            </div>
+          ) : (
           <>
             <div className="divide-y divide-border">
               {paginated.map((o) => (
@@ -370,7 +428,7 @@ export function AdminOrders() {
                                 {o.order_items?.map((item: any) => (
                                   <div key={item.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-2">
                                     <div className="w-10 h-10 bg-accent rounded overflow-hidden flex-shrink-0">
-                                      {item.products?.images?.[0] && <img src={item.products.images[0]} alt="" className="w-full h-full object-cover" />}
+                                      {item.products?.images?.[0] && <img src={item.products.images[0]} alt={item.products?.name || 'Product image'} className="w-full h-full object-cover" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm truncate">{item.products?.name}</p>
@@ -460,6 +518,7 @@ export function AdminOrders() {
           </>
         )}
       </Card>
+      )}
 
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -496,6 +555,43 @@ export function AdminOrders() {
           </div>
         </div>
       )}
+
+      {/* Cancellation Reason Dialog */}
+      <Dialog open={cancelDialog !== null} onOpenChange={() => { if (!cancelling) { setCancelDialog(null); setCancelReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Order #{cancelDialog?.orderNumber}</DialogTitle>
+            <DialogDescription>
+              Provide a reason for cancellation. This will be included in the email sent to the customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <XCircle className="w-4 h-4 inline mr-1" />
+                Cancellation Reason (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="e.g. Item out of stock, payment issue, customer requested cancellation, etc."
+                rows={3}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setCancelDialog(null); setCancelReason(''); }} disabled={cancelling}>Keep Order</Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel Order'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

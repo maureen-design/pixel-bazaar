@@ -527,7 +527,7 @@ export function Checkout() {
         <Navbar />
         <div className="max-w-lg mx-auto px-4 py-16">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
+            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
               <CreditCard className="w-10 h-10 text-primary" />
             </div>
             <h2 className="text-2xl font-bold text-center mb-2">Complete Card Payment</h2>
@@ -677,7 +677,7 @@ export function Checkout() {
                     {[
                       { id: 'mpesa', icon: Smartphone, bg: 'bg-success', label: 'M-Pesa', desc: 'Pay via M-Pesa', enabled: settings.mpesaEnabled },
                       { id: 'card', icon: CreditCard, bg: 'bg-primary', label: 'Credit/Debit Card', desc: 'Visa, Mastercard', enabled: settings.cardEnabled },
-                      { id: 'bank', icon: Building2, bg: 'bg-slate-600', label: 'Bank Transfer', desc: 'Direct bank transfer', enabled: settings.bankTransferEnabled },
+                      { id: 'bank', icon: Building2, bg: 'bg-muted-foreground', label: 'Bank Transfer', desc: 'Direct bank transfer', enabled: settings.bankTransferEnabled },
                     ].filter((p) => p.enabled).map(({ id, icon: Icon, bg, label, desc }) => (
                       <button key={id} type="button" role="radio" aria-checked={selectedPayment === id} aria-label={label} onClick={() => setSelectedPayment(id)}
                         className={`w-full flex items-center gap-4 p-4 rounded-lg border transition-all ${selectedPayment === id ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground'}`}>

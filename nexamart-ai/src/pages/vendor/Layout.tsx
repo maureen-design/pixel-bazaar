@@ -1,16 +1,17 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, BarChart3, LogOut, Store, Menu, X, ArrowLeft, Settings, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, Package, BarChart3, LogOut, Menu, X, ArrowLeft, Settings, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useSettings } from '../../hooks/useSettings';
+import { Monogram } from '../../components/Monogram';
 
 const navItems = [
   { path: '/vendor/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/vendor/products', icon: Package, label: 'Products' },
-  { path: '/vendor/orders', icon: ShoppingCart, label: 'Orders' },
+  { path: '/vendor/orders', icon: Package, label: 'Orders' },
   { path: '/vendor/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/vendor/settings', icon: Settings, label: 'Settings' },
 ];
@@ -33,7 +34,7 @@ export function VendorLayout() {
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <Store className="w-6 h-6 text-primary" />
+          <Monogram className="w-6 h-6" />
           <span className="font-semibold">{settings.siteName} Vendor</span>
         </div>
         <Button
@@ -122,7 +123,7 @@ function SidebarContent({
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <Store className="w-8 h-8 text-primary" />
+          <Monogram className="w-8 h-8" />
           <div>
             <h1 className="font-bold text-lg">{siteName}</h1>
             <p className="text-xs text-muted-foreground">Vendor Portal</p>

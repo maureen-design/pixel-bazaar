@@ -15,6 +15,9 @@ const PRODUCT_TYPE_OPTIONS = [
   { value: 'heels', label: 'Heels' },
   { value: 'formal_shoes', label: 'Formal Shoes' },
   { value: 'sandals', label: 'Sandals' },
+  { value: 'boots', label: 'Boots' },
+  { value: 'loafers', label: 'Loafers' },
+  { value: 'handmade_footwear', label: 'Handmade Footwear' },
   { value: 'handbag', label: 'Handbag' },
   { value: 'smartphone', label: 'Smartphone' },
   { value: 'laptop', label: 'Laptop' },
@@ -106,7 +109,7 @@ export function SearchFilters({
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground">Category</label>
         <ShadSelect value={categoryId || ''} onValueChange={onCategoryChange}>
-          <SelectTrigger className="w-full bg-muted border-border text-foreground">
+          <SelectTrigger className="w-full bg-muted border-border text-foreground" aria-label="Filter by category">
             <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
@@ -123,7 +126,7 @@ export function SearchFilters({
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground">Product Type</label>
         <ShadSelect value={productType || ''} onValueChange={onProductTypeChange}>
-          <SelectTrigger className="w-full bg-muted border-border text-foreground">
+          <SelectTrigger className="w-full bg-muted border-border text-foreground" aria-label="Filter by product type">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
@@ -140,7 +143,7 @@ export function SearchFilters({
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground">Brand</label>
         <ShadSelect value={brand || ''} onValueChange={onBrandChange}>
-          <SelectTrigger className="w-full bg-muted border-border text-foreground">
+          <SelectTrigger className="w-full bg-muted border-border text-foreground" aria-label="Filter by brand">
             <SelectValue placeholder="All Brands" />
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
@@ -157,7 +160,7 @@ export function SearchFilters({
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground">Color</label>
         <ShadSelect value={color || ''} onValueChange={onColorChange}>
-          <SelectTrigger className="w-full bg-muted border-border text-foreground">
+          <SelectTrigger className="w-full bg-muted border-border text-foreground" aria-label="Filter by color">
             <SelectValue placeholder="All Colors" />
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
@@ -177,6 +180,7 @@ export function SearchFilters({
           <input
             type="number"
             placeholder="Min"
+            aria-label="Minimum price"
             value={minPrice ?? ''}
             onChange={(e) => onMinPriceChange(e.target.value)}
             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -185,6 +189,7 @@ export function SearchFilters({
           <input
             type="number"
             placeholder="Max"
+            aria-label="Maximum price"
             value={maxPrice ?? ''}
             onChange={(e) => onMaxPriceChange(e.target.value)}
             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -195,7 +200,7 @@ export function SearchFilters({
       <div className="space-y-2">
         <label className="text-sm text-muted-foreground">Sort By</label>
           <ShadSelect value={sortBy || 'newest'} onValueChange={onSortChange}>
-          <SelectTrigger className="w-full bg-muted border-border text-foreground">
+          <SelectTrigger className="w-full bg-muted border-border text-foreground" aria-label="Sort products by">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">

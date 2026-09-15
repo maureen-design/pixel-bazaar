@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { motion } from 'motion/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { formatPrice } from '../../config/pricing';
 
 function formatKES(price: number) {
   return new Intl.NumberFormat('en-KE', {
@@ -180,8 +181,6 @@ export function VendorAnalytics() {
       setLoading(false);
     }
   };
-
-  const formatPrice = (price: number) => formatKES(price);
 
   const formatPercent = (current: number, previous: number) => {
     if (previous === 0) return current > 0 ? '+100%' : '0%';
@@ -384,7 +383,7 @@ export function VendorAnalytics() {
                     {index + 1}
                   </span>
                   {product.image ? (
-                    <img src={product.image} alt="" className="w-10 h-10 rounded-lg object-cover bg-muted" />
+                    <img src={product.image} alt={product.name || 'Product image'} className="w-10 h-10 rounded-lg object-cover bg-muted" />
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
                       <Package className="w-4 h-4 text-muted-foreground" />

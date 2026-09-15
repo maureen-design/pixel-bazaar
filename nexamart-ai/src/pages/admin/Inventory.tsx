@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
+import { formatPrice } from '../../config/pricing';
 
 const PAGE_SIZE = 15;
 
@@ -64,8 +65,6 @@ export function AdminInventory() {
 
   useEffect(() => { setPage(1); }, [search, stockFilter, vendorFilter]);
 
-  const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
-
   const exportCsv = () => {
     const header = 'Name,Vendor,Stock,Status,Value\n';
     const rows = filtered.map((p) => {
@@ -98,6 +97,17 @@ export function AdminInventory() {
       const { error } = await supabase.from('products').update({ stock_quantity: qty }).eq('id', adjustTarget.id);
       if (error) { toast.error('Failed to update stock'); return; }
       toast.success(`Stock updated to ${qty} for "${adjustTarget.name}"`);
+      // Send low stock alert if stock is <= 5
+      if (qty <= 5 && adjustTarget.vendor_id) {
+        supabase.functions.invoke('send-low-stock-alert', {
+          body: {
+            product_id: adjustTarget.id,
+            product_name: adjustTarget.name,
+            stock_quantity: qty,
+            vendor_id: adjustTarget.vendor_id,
+          },
+        }).catch(() => {});
+      }
       setAdjustTarget(null);
       fetchProducts();
     } finally {
@@ -156,7 +166,7 @@ export function AdminInventory() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Search products..." aria-label="Search inventory" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={stockFilter} onValueChange={setStockFilter}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>

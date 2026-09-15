@@ -58,8 +58,11 @@ const SLUG_ICON_MAP: Record<string, LucideIcon> = {
   'digital-products': Cpu,
   electronics: Smartphone,
   fashion: Shirt,
+  'fashion-mens': Shirt,
+  'fashion-womens': Shirt,
   'home-living': Sofa,
   'local-handmade': Hammer,
+  shoes: ShoppingBag,
   sports: Dumbbell,
   toys: ToyBrick,
 };

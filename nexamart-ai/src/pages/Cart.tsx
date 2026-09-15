@@ -7,18 +7,12 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { getDeliveryBaseCost } from '../lib/settings';
 import { useSettings } from '../hooks/useSettings';
+import { formatPrice } from '../config/pricing';
 
 export function Cart() {
   const { cartItems, cartTotal, removeFromCart, updateQuantity, loading } = useCart();
   const { user } = useAuth();
   const { settings } = useSettings();
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
 
   const itemPrice = (item: (typeof cartItems)[number]) => {
     return item.variant_price ?? item.products?.price ?? 0;

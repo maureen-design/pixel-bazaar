@@ -1,7 +1,7 @@
 import { useSearchParams, Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Sparkles, UserPlus, Search, ShoppingCart, Heart, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, UserPlus, Package, Store, ArrowRight, X } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Hero } from '../components/Hero';
@@ -12,12 +12,11 @@ import { Button } from '../components/ui/button';
 import { Footer } from '../components/Footer';
 import { WhyUs } from '../components/WhyUs';
 import { AIShoppingAssistant } from '../components/ai/AIShoppingAssistant';
-import { useFeaturedProducts, useNewArrivals } from '../hooks/useProducts';
+import { useFeaturedProducts, useNewArrivals, usePopularPicks, type SortOption } from '../hooks/useProducts';
 import { useCategoryCounts } from '../hooks/useCategoryFilter';
 import { useAuth } from '../context/AuthContext';
-import { useWishlist } from '../context/WishlistContext';
-import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 const PAGE_SIZE = 12;
 
@@ -26,20 +25,58 @@ export function Homepage() {
   const selectedCategory = searchParams.get('category') || null;
   const currentPage = parseInt(searchParams.get('page') || '1', 10);
   const prefersReduced = useReducedMotion();
-  const { user, profile } = useAuth();
-  const { wishlistCount } = useWishlist();
-  const { cartCount } = useCart();
-  const [activeOrders, setActiveOrders] = useState(0);
+  const { user, profile, isVendor } = useAuth();
+  const [vendorStats, setVendorStats] = useState<{ productCount: number; pendingOrders: number } | null>(null);
+  const [showSignUpPrompt, setShowSignUpPrompt] = useState(false);
+  const [hasScrolledPast, setHasScrolledPast] = useState(false);
+  const [heroProductIds, setHeroProductIds] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<SortOption>('rating');
+
+  usePageMeta({
+    title: 'Home',
+    description: 'Discover amazing products at NexaMart AI. Shop electronics, fashion, home goods and more with AI-powered recommendations.',
+  });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVendor) return;
+    Promise.all([
+      supabase.from('products').select('id', { count: 'exact', head: true }).eq('vendor_id', user.id),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('vendor_id', user.id).eq('status', 'pending'),
+    ]).then(([products, orders]) => {
+      setVendorStats({
+        productCount: products.count ?? 0,
+        pendingOrders: orders.count ?? 0,
+      });
+    });
+  }, [user, isVendor]);
+
+  // Fetch hero product IDs to exclude from other sections
+  useEffect(() => {
     supabase
-      .from('orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .in('status', ['pending', 'confirmed', 'processing', 'shipped'])
-      .then(({ count }) => setActiveOrders(count ?? 0));
-  }, [user]);
+      .from('products')
+      .select('id')
+      .eq('status', 'active')
+      .not('images', 'is', null)
+      .order('rating', { ascending: false })
+      .limit(5)
+      .then(({ data }) => {
+        if (data) {
+          setHeroProductIds(new Set(data.map(p => p.id)));
+        }
+      });
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (!user && !hasScrolledPast && window.scrollY > 400) {
+      setHasScrolledPast(true);
+      setShowSignUpPrompt(true);
+    }
+  }, [user, hasScrolledPast]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   const setSelectedCategory = (categoryId: string | null) => {
     const next = new URLSearchParams();
@@ -54,8 +91,9 @@ export function Homepage() {
     setSearchParams(next, { replace: true });
   };
 
-  const { products: featuredProducts, loading: featuredLoading, totalCount: featuredTotal } = useFeaturedProducts(selectedCategory, currentPage, PAGE_SIZE);
+  const { products: featuredProducts, loading: featuredLoading, totalCount: featuredTotal } = useFeaturedProducts(selectedCategory, currentPage, PAGE_SIZE, sortBy);
   const { products: newArrivals, loading: newArrivalsLoading } = useNewArrivals(selectedCategory, 1, 4);
+  const { products: popularPicks, loading: popularLoading } = usePopularPicks(8);
   const { counts } = useCategoryCounts();
 
   const selectedCategoryName = selectedCategory
@@ -102,22 +140,69 @@ export function Homepage() {
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
       <AnnouncementBanner />
-      <Hero />
+      <Hero userName={profile?.full_name?.split(' ')[0] || null} isLoggedIn={!!user} />
 
-      {/* Logged-in personalization bar */}
+      {/* Quick actions for logged-in users */}
       {user && (
         <motion.div
-          className="bg-gradient-to-r from-brand/5 via-card to-ai/5 border-y border-border"
-          initial={prefersReduced ? false : { opacity: 0, y: 10 }}
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"
+          initial={prefersReduced ? false : { opacity: 0, y: 20 }}
           animate={prefersReduced ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <p className="text-foreground text-sm">
-              Welcome back, <span className="font-semibold text-brand">{profile?.full_name?.split(' ')[0] || 'there'}</span>.
-              {activeOrders > 0 && <span className="text-muted-foreground ml-1">You have {activeOrders} active order{activeOrders === 1 ? '' : 's'}.</span>}
-              {activeOrders === 0 && <span className="text-muted-foreground ml-1"> Ready to find something great?</span>}
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link
+              to="/orders"
+              className="flex items-center gap-4 bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all group"
+            >
+              <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-dark rounded-xl flex items-center justify-center flex-shrink-0">
+                <Package className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">Orders</p>
+                <p className="text-xs text-muted-foreground">Track, manage & return orders</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+            {isVendor && (
+              <Link
+                to="/vendor/dashboard"
+                className="flex items-center gap-4 bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all group"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-vendor to-vendor/80 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Store className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">Seller Dashboard</p>
+                  <p className="text-xs text-muted-foreground">
+                    {vendorStats ? (
+                      <>
+                        {vendorStats.productCount} product{vendorStats.productCount === 1 ? '' : 's'}
+                        {vendorStats.pendingOrders > 0 && <> · <span className="text-warning">{vendorStats.pendingOrders} pending order{vendorStats.pendingOrders === 1 ? '' : 's'}</span></>}
+                      </>
+                    ) : (
+                      'Manage store, orders & analytics'
+                    )}
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </Link>
+            )}
+            {!isVendor && (
+              <Link
+                to="/vendor/apply"
+                className="flex items-center gap-4 bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all group"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-vendor to-vendor/80 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Store className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">Become a Seller</p>
+                  <p className="text-xs text-muted-foreground">Start selling on NexaMart</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </Link>
+            )}
           </div>
         </motion.div>
       )}
@@ -132,11 +217,11 @@ export function Homepage() {
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm">
             <p className="text-muted-foreground">
-              <span className="text-foreground font-medium">Create an account</span> to save items, track orders, and get personalized recommendations.
+              <span className="text-foreground font-medium">Join NexaMart</span> — save items, track orders, and get AI-powered recommendations.
             </p>
             <Link
               to="/signup"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-brand/10 text-brand font-medium rounded-lg hover:bg-brand/20 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-brand text-white font-medium rounded-lg hover:bg-brand-dark transition-colors whitespace-nowrap"
             >
               <UserPlus className="w-3.5 h-3.5" />
               Sign Up Free
@@ -171,13 +256,31 @@ export function Homepage() {
           viewport={{ once: true, amount: 0.1 }}
           transition={{ duration: 0.5 }}
         >
-          <h2 className="text-2xl font-bold mb-6">
-            {selectedCategoryName ? (
-              <>{selectedCategoryName} Products</>
-            ) : (
-              'Featured Products'
-            )}
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold">
+                {selectedCategoryName ? (
+                  <>{selectedCategoryName} Products</>
+                ) : (
+                  'Featured Products'
+                )}
+              </h2>
+              <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-ai bg-ai/10 px-2.5 py-1 rounded-full">
+                <Sparkles className="w-3 h-3" />
+                AI Recommended
+              </span>
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="px-3 py-1.5 text-sm bg-card border border-border rounded-lg text-foreground cursor-pointer hover:bg-muted transition-colors"
+            >
+              <option value="rating">Top Rated</option>
+              <option value="newest">Newest</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+            </select>
+          </div>
           {featuredLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[...Array(8)].map((_, i) => (
@@ -187,7 +290,10 @@ export function Homepage() {
           ) : featuredProducts.length > 0 ? (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {featuredProducts.map((product) => (
+                {featuredProducts
+                  .filter(p => !heroProductIds.has(p.id))
+                  .slice(0, 8)
+                  .map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
@@ -257,73 +363,93 @@ export function Homepage() {
           )}
         </motion.section>
 
-        {/* Why Us (visitors) / Continue Shopping (logged-in) */}
-        {user ? (
-          <motion.div
-            className="mb-16"
-            initial={prefersReduced ? false : { opacity: 0, y: 30 }}
-            whileInView={prefersReduced ? undefined : { opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h2 className="text-2xl font-bold mb-6">Continue Shopping</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { to: '/search', icon: Search, label: 'Browse All', desc: 'Find something new', show: true },
-                { to: '/cart', icon: ShoppingCart, label: 'Your Cart', desc: cartCount > 0 ? `${cartCount} item${cartCount === 1 ? '' : 's'} waiting` : 'Start adding items', show: true },
-                { to: '/wishlist', icon: Heart, label: 'Wishlist', desc: wishlistCount > 0 ? `${wishlistCount} saved item${wishlistCount === 1 ? '' : 's'}` : 'Save items you love', show: true },
-                { to: '/orders', icon: Package, label: 'Orders', desc: activeOrders > 0 ? `${activeOrders} in progress` : 'View order history', show: true },
-              ].filter((item) => item.show).map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="bg-card border border-border rounded-xl p-5 hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all group"
-                >
-                  <div className="w-10 h-10 bg-brand/10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-brand/20 transition-colors">
-                    <item.icon className="w-5 h-5 text-brand" />
-                  </div>
-                  <p className="font-semibold text-foreground text-sm mb-1">{item.label}</p>
-                  <p className="text-muted-foreground text-xs">{item.desc}</p>
-                </Link>
-              ))}
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            initial={prefersReduced ? false : { opacity: 0, y: 30 }}
-            whileInView={prefersReduced ? undefined : { opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.5 }}
-          >
-            <WhyUs />
-          </motion.div>
-        )}
-
-        {/* AI Assistant CTA */}
-        <motion.div
-          className="bg-gradient-to-br from-brand/10 via-card to-ai/10 border border-transparent ring-1 ring-brand/25 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg"
+        {/* Popular Picks */}
+        <motion.section
+          className="mb-16"
           initial={prefersReduced ? false : { opacity: 0, y: 30 }}
           whileInView={prefersReduced ? undefined : { opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.4 }}
+          viewport={{ once: true, amount: 0.1 }}
+          transition={{ duration: 0.5 }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-dark rounded-xl flex items-center justify-center flex-shrink-0">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="font-semibold text-lg">Not sure what to buy?</p>
-              <p className="text-muted-foreground text-sm">
-                Let our AI assistant find the perfect product for you.
-              </p>
-            </div>
+          <div className="flex items-center gap-3 mb-6">
+            <h2 className="text-2xl font-bold">Popular Picks</h2>
+            <span className="text-xs font-medium uppercase tracking-wider text-ai bg-ai/10 px-2.5 py-1 rounded-full">
+              Top Rated
+            </span>
           </div>
-          <AIShoppingAssistant variant="cta" />
+          {popularLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <ProductSkeleton key={i} />
+              ))}
+            </div>
+          ) : popularPicks.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {popularPicks
+                .filter(p => !heroProductIds.has(p.id))
+                .slice(0, 8)
+                .map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-card rounded-lg p-8 border border-border text-center">
+              <p className="text-muted-foreground">No popular picks yet. Check back soon!</p>
+            </div>
+          )}
+        </motion.section>
+
+        {/* Why Us */}
+        <motion.div
+          initial={prefersReduced ? false : { opacity: 0, y: 30 }}
+          whileInView={prefersReduced ? undefined : { opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.5 }}
+        >
+          <WhyUs />
         </motion.div>
       </div>
 
       <Footer />
       <AIShoppingAssistant />
+
+      {/* Exit-intent sign-up prompt for visitors */}
+      {!user && showSignUpPrompt && (
+        <motion.div
+          className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6"
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="max-w-2xl mx-auto bg-card border border-border rounded-2xl shadow-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-brand to-brand-dark rounded-xl flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Create an account to save your favorites</p>
+                <p className="text-sm text-muted-foreground">Track orders, get AI recommendations, and more.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/signup"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand text-white font-medium rounded-lg hover:bg-brand-dark transition-colors text-sm whitespace-nowrap"
+              >
+                Sign Up Free
+              </Link>
+              <button
+                onClick={() => setShowSignUpPrompt(false)}
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { AuthLayout } from '../../layouts/AuthLayout';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { toast } from 'sonner';
+import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -14,6 +15,12 @@ export function ForgotPassword() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const rateLimitKey = `forgot:${email.toLowerCase()}`;
+    if (!checkRateLimit(rateLimitKey, 3, 300000)) { // 3 attempts per 5 minutes
+      const remaining = getRemainingAttempts(rateLimitKey, 3);
+      toast.error(`Too many requests. Please try again later. (${remaining} attempts remaining)`);
+      return;
+    }
     setLoading(true);
     try {
       await resetPassword(email);

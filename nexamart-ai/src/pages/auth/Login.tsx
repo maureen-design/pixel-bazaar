@@ -7,11 +7,14 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { toast } from 'sonner';
 import { useSettings } from '../../hooks/useSettings';
+import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
+import { loginSchema } from '../../lib/validations';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { signIn } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -23,6 +26,25 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const result = loginSchema.safeParse({ email, password });
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach(issue => {
+        const field = issue.path[0] as string;
+        fieldErrors[field] = issue.message;
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+    setErrors({});
+
+    const rateLimitKey = `login:${email.toLowerCase()}`;
+    if (!checkRateLimit(rateLimitKey, 5, 60000)) {
+      const remaining = getRemainingAttempts(rateLimitKey, 5);
+      toast.error(`Too many attempts. Please try again in a minute. (${remaining} attempts remaining)`);
+      return;
+    }
     setLoading(true);
     try {
       await signIn(email, password);
@@ -59,7 +81,8 @@ export function Login() {
           type="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); setErrors(prev => ({ ...prev, email: '' })); }}
+          error={errors.email}
           required
         />
         <Input
@@ -67,7 +90,8 @@ export function Login() {
           type="password"
           placeholder="••••••••"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })); }}
+          error={errors.password}
           required
         />
         <div className="flex items-center justify-between">

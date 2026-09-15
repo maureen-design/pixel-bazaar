@@ -19,7 +19,7 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
           className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand to-brand-dark text-white font-medium rounded-xl hover:from-brand-dark hover:to-brand transition-all shadow-lg shadow-primary/25"
         >
           <Sparkles aria-hidden="true" className="w-4 h-4" />
-          Ask AI Assistant
+          Ask Nexa
         </button>
         <ShoppingAssistantModal open={open} onOpenChange={setOpen} initialCategoryId={initialCategoryId} />
       </>
@@ -30,7 +30,7 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
     <>
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open AI Shopping Assistant"
+        aria-label="Open Nexa Shopping Assistant"
         className={cn(
           'fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full',
           'bg-gradient-to-br from-brand to-brand-dark text-white',

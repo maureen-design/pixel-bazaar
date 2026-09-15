@@ -1,15 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Package, ChevronDown, ChevronUp, Calendar, Mail, Phone, MapPin, Download } from 'lucide-react';
+import { Search, Package, ChevronDown, ChevronUp, Calendar, Mail, Phone, MapPin, Download, XCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatShippingAddress, formatOrderDate } from '../../utils/formatUtils';
 import { OrderTimeline } from '../../components/OrderTimeline';
+import { formatPrice } from '../../config/pricing';
 
 interface Order {
   id: string;
@@ -19,6 +21,7 @@ interface Order {
   shipping_address: string;
   payment_method: string;
   payment_status: string;
+  cancellation_reason?: string | null;
   created_at: string;
   profiles: { full_name: string; email?: string; phone?: string } | null;
   order_items: OrderItem[];
@@ -38,13 +41,16 @@ interface OrderItem {
 type DateRange = 'all' | '7d' | '30d' | '90d';
 
 export function VendorOrders() {
-  const { vendor } = useAuth();
+  const { vendor, user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [cancelDialog, setCancelDialog] = useState<{ orderId: string; orderNumber: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (vendor) {
@@ -77,6 +83,12 @@ export function VendorOrders() {
   };
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    if (newStatus === 'cancelled') {
+      // Open cancel dialog instead
+      const order = orders.find(o => o.id === orderId);
+      setCancelDialog({ orderId, orderNumber: order?.order_number || '' });
+      return;
+    }
     try {
       const { error } = await supabase
         .from('orders')
@@ -85,9 +97,46 @@ export function VendorOrders() {
 
       if (error) throw error;
       toast.success('Order status updated');
+      // Send status email (non-blocking)
+      supabase.functions.invoke('send-order-status-email', {
+        body: { order_id: orderId, status: newStatus },
+      }).catch(() => {});
       fetchOrders();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update order');
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelDialog) return;
+    setCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancellation_reason: cancelReason.trim() || null,
+          cancelled_by: user?.id || null,
+        })
+        .eq('id', cancelDialog.orderId);
+
+      if (error) throw error;
+      toast.success('Order cancelled');
+      // Send cancellation email with reason (non-blocking)
+      supabase.functions.invoke('send-order-status-email', {
+        body: {
+          order_id: cancelDialog.orderId,
+          status: 'cancelled',
+          reason: cancelReason.trim() || null,
+        },
+      }).catch(() => {});
+      setCancelDialog(null);
+      setCancelReason('');
+      fetchOrders();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel order');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -116,13 +165,6 @@ export function VendorOrders() {
       return matchesSearch && matchesStatus && matchesDate;
     });
   }, [orders, searchQuery, statusFilter, dateRange]);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
 
   const handleExport = () => {
     const headers = ['Order #', 'Customer', 'Date', 'Items', 'Total', 'Status', 'Payment'];
@@ -416,6 +458,43 @@ export function VendorOrders() {
           ))}
         </div>
       )}
+
+      {/* Cancellation Reason Dialog */}
+      <Dialog open={cancelDialog !== null} onOpenChange={() => { if (!cancelling) { setCancelDialog(null); setCancelReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Order #{cancelDialog?.orderNumber}</DialogTitle>
+            <DialogDescription>
+              Provide a reason for cancellation. This will be included in the email sent to the customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <XCircle className="w-4 h-4 inline mr-1" />
+                Cancellation Reason (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="e.g. Item out of stock, customer requested cancellation, etc."
+                rows={3}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setCancelDialog(null); setCancelReason(''); }} disabled={cancelling}>Keep Order</Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel Order'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

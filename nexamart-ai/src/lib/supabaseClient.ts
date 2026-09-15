@@ -1,11 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-// TEMPORARY: hardcode URL while fixing .env loading (remove this later)
-const supabaseUrl = 'https://jsdynslcjnfdulzgvamj.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-console.log('[Supabase] URL:', supabaseUrl);
-console.log('[Supabase] ANON key present?', supabaseAnonKey ? 'Yes' : 'No');
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');

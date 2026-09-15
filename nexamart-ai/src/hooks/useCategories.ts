@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { Category } from '../types';
 
-export function useCategories() {
+export function useCategories({ topLevelOnly = false } = {}) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -10,10 +10,16 @@ export function useCategories() {
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('categories')
           .select('*')
           .order('name');
+
+        if (topLevelOnly) {
+          query = query.is('parent_id', null);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -26,7 +32,7 @@ export function useCategories() {
     }
 
     fetchCategories();
-  }, []);
+  }, [topLevelOnly]);
 
   return { categories, loading, error };
 }

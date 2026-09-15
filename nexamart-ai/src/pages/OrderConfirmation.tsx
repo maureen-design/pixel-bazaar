@@ -14,6 +14,7 @@ import { formatShippingAddress, addBusinessDays } from '../utils/formatUtils';
 import { SafeImg } from '../components/SafeImg';
 import { OrderTimeline, OrderCancelledNotice } from '../components/OrderTimeline';
 import { formatBankAccount } from '../lib/formatBankAccount';
+import { formatPrice } from '../config/pricing';
 
 interface OrderItem {
   id: string;
@@ -230,10 +231,6 @@ export function OrderConfirmation() {
     return new Date(date).toLocaleDateString('en-KE', {
       year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
-  };
-
-  const formatPrice = (amount: number) => {
-    return `KES ${amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
   };
 
   const isDeadlineSoon = (order.payment_type === 'later' || isBankPending) && order.payment_deadline &&

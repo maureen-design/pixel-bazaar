@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Package, ChevronDown, ChevronUp, ExternalLink, Clock, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -9,6 +9,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatShippingAddress, formatOrderDate } from '../utils/formatUtils';
+import { formatPrice } from '../config/pricing';
 
 interface Order {
   id: string;
@@ -37,6 +38,8 @@ interface OrderItem {
 
 export function Orders() {
   const { user } = useAuth();
+  const { orderNumber } = useParams<{ orderNumber: string }>();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -46,6 +49,16 @@ export function Orders() {
       fetchOrders();
     }
   }, [user]);
+
+  useEffect(() => {
+    // Auto-expand order if orderNumber is in URL
+    if (orderNumber && orders.length > 0) {
+      const matchingOrder = orders.find(o => o.order_number === orderNumber);
+      if (matchingOrder) {
+        setExpandedOrders(new Set([matchingOrder.id]));
+      }
+    }
+  }, [orderNumber, orders]);
 
   const fetchOrders = async () => {
     try {
@@ -79,13 +92,6 @@ export function Orders() {
       }
       return newSet;
     });
-  };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
   };
 
   const getStatusColor = (status: string) => {
@@ -200,12 +206,12 @@ export function Orders() {
                       </div>
                       <div className="flex items-center gap-3">
                         {order.payment_type === 'later' && order.payment_status !== 'paid' && (
-                          <Button size="sm" onClick={(e) => { e.stopPropagation(); window.location.href = `/order-confirmation/${order.id}`; }}>
+                          <Button size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/order-confirmation/${order.id}`); }}>
                             Pay Now
                           </Button>
                         )}
                         {order.payment_method === 'bank' && order.payment_status !== 'paid' && order.status !== 'cancelled' && (
-                          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); window.location.href = `/order-confirmation/${order.id}`; }}>
+                          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`/order-confirmation/${order.id}`); }}>
                             View Instructions
                           </Button>
                         )}
@@ -269,7 +275,7 @@ export function Orders() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.location.href = `/order-confirmation/${order.id}`}
+                              onClick={() => navigate(`/order-confirmation/${order.id}`)}
                             >
                               <ExternalLink className="w-4 h-4 mr-2" />
                               View Full Details

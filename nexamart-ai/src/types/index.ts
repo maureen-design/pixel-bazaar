@@ -42,6 +42,7 @@ export interface Product {
     id: string;
     store_name: string;
     store_logo: string;
+    country?: string | null;
   };
   category?: {
     id: string;
@@ -56,6 +57,7 @@ export interface Category {
   slug: string;
   description: string;
   icon: string;
+  parent_id: string | null;
   created_at: string;
 }
 
@@ -65,6 +67,7 @@ export interface Vendor {
   store_logo: string;
   description: string;
   rating: number;
+  country?: string | null;
 }
 
 export interface CartItem {

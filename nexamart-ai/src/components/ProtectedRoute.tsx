@@ -1,11 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-interface ProtectedRouteProps {
-  roles?: ('customer' | 'vendor' | 'admin')[];
-}
-
-export function ProtectedRoute({ roles: _roles }: ProtectedRouteProps) {
+export function ProtectedRoute() {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -22,7 +18,5 @@ export function ProtectedRoute({ roles: _roles }: ProtectedRouteProps) {
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // Role-based access (we'll implement role checks later with the user profile)
-  // For now, just check if user is authenticated
   return <Outlet />;
 }

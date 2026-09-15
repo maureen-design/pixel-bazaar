@@ -9,6 +9,9 @@ import type { Product } from '../types';
 import { ProductSelector } from '../components/ai/ProductSelector';
 import { Loader2, Sparkles, Check, ArrowLeftRight, Minus } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatPrice } from '../config/pricing';
+import { SpeakButton } from '../components/ui/SpeakButton';
+import { useCompare } from '../context/CompareContext';
 
 interface CompareResult {
   summary: string;
@@ -20,22 +23,32 @@ export function Compare() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlIds = searchParams.get('ids')?.split(',').filter(Boolean) || [];
+  const { products: contextProducts, clearAll: clearCompareContext } = useCompare();
   const { products, loading } = useCompareProducts('', urlIds, 10);
   const [selected, setSelected] = useState<Product[]>([]);
   const [comparing, setComparing] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
 
   useEffect(() => {
-    if (loading || products.length === 0) return;
-    const matches = products.filter((p) => urlIds.includes(p.id)).slice(0, 3);
-    if (matches.length >= 2) {
-      setSelected(matches);
-      setResult(null);
-    }
-  }, [loading, products, searchParams, urlIds.join(',')]);
+    if (loading) return;
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(price);
+    if (urlIds.length >= 2 && products.length > 0) {
+      const matches = products.filter((p) => urlIds.includes(p.id)).slice(0, 3);
+      if (matches.length >= 2) {
+        setSelected(matches);
+        setResult(null);
+        return;
+      }
+    }
+
+    if (contextProducts.length >= 2 && urlIds.length === 0) {
+      setSelected(contextProducts);
+      setResult(null);
+      clearCompareContext();
+      const ids = contextProducts.map((p) => p.id).join(',');
+      navigate(`/compare?ids=${ids}`, { replace: true });
+    }
+  }, [loading, products, searchParams, urlIds.join(','), contextProducts, navigate, clearCompareContext]);
 
   const toggleProduct = (product: Product) => {
     setResult(null);
@@ -172,6 +185,18 @@ export function Compare() {
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-5 h-5 text-primary" />
                 <h2 className="text-lg font-semibold">AI Summary</h2>
+                <SpeakButton
+                  text={[
+                    result.summary,
+                    ...result.comparisons?.map((c) => {
+                      const product = selected.find((s) => s.id === c.product_id);
+                      return `${c.use_case}: ${product?.name}. ${c.why}`;
+                    }) || [],
+                    ...(result.trade_offs?.length ? ['Trade-offs:'] : []),
+                    ...(result.trade_offs || []),
+                  ].join('. ')}
+                  label="Read full comparison aloud"
+                />
               </div>
               <p className="text-secondary-foreground">{result.summary}</p>
             </div>

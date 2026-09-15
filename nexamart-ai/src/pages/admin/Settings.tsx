@@ -167,6 +167,8 @@ export function AdminSettings() {
     set('countySurcharges', draft.countySurcharges.filter((_, i) => i !== index));
   };
 
+  const [pendingWarnings, setPendingWarnings] = useState<Set<string>>(new Set());
+
   const handleSave = async () => {
     let payload: Partial<PlatformSettings>;
     try {
@@ -177,8 +179,17 @@ export function AdminSettings() {
     }
 
     const allPaymentsOff = !payload.mpesaEnabled && !payload.cardEnabled && !payload.bankPayLaterEnabled && !payload.bankTransferEnabled;
-    if (allPaymentsOff && !window.confirm('All payment methods will be disabled, so customers will not be able to pay for orders. Continue anyway?')) return;
-    if (payload.taxRate === 0 && !window.confirm('Setting the tax rate to 0% means no tax will be charged on orders. Continue anyway?')) return;
+    if (allPaymentsOff && !pendingWarnings.has('payments')) {
+      toast.warning('All payment methods will be disabled. Tap Save again to confirm.', { duration: 8000 });
+      setPendingWarnings((prev) => new Set(prev).add('payments'));
+      return;
+    }
+    if (payload.taxRate === 0 && !pendingWarnings.has('tax')) {
+      toast.warning('Tax rate set to 0%. Tap Save again to confirm.', { duration: 8000 });
+      setPendingWarnings((prev) => new Set(prev).add('tax'));
+      return;
+    }
+    setPendingWarnings(new Set());
 
     setSaving(true);
     try {

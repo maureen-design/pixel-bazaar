@@ -12,16 +12,29 @@ export function useCategoryCounts() {
   useEffect(() => {
     async function fetchCounts() {
       try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('category_id')
-          .eq('status', 'active');
+        const [productsRes, categoriesRes] = await Promise.all([
+          supabase
+            .from('products')
+            .select('category_id')
+            .eq('status', 'active'),
+          supabase
+            .from('categories')
+            .select('id, parent_id'),
+        ]);
 
-        if (error) throw error;
+        if (productsRes.error) throw productsRes.error;
+        if (categoriesRes.error) throw categoriesRes.error;
+
+        const categories = categoriesRes.data || [];
+        const childToParent: Record<string, string> = {};
+        categories.forEach((cat) => {
+          if (cat.parent_id) childToParent[cat.id] = cat.parent_id;
+        });
 
         const countMap: Record<string, number> = {};
-        (data || []).forEach((p) => {
-          countMap[p.category_id] = (countMap[p.category_id] || 0) + 1;
+        (productsRes.data || []).forEach((p) => {
+          const parentId = childToParent[p.category_id] || p.category_id;
+          countMap[parentId] = (countMap[parentId] || 0) + 1;
         });
 
         setCounts(countMap);
@@ -49,6 +62,17 @@ export function useCategoryFilter(categoryId: string | null) {
       setError(null);
 
       try {
+        let filterCategoryIds: string[] | null = null;
+
+        if (categoryId) {
+          const { data: children } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('parent_id', categoryId);
+
+          filterCategoryIds = [categoryId, ...(children?.map((c) => c.id) || [])];
+        }
+
         let query = supabase
           .from('products')
           .select(`
@@ -56,7 +80,8 @@ export function useCategoryFilter(categoryId: string | null) {
             vendors!inner (
               id,
               store_name,
-              store_logo
+              store_logo,
+              country
             ),
             categories!inner (
               id,
@@ -66,8 +91,8 @@ export function useCategoryFilter(categoryId: string | null) {
           `)
           .eq('status', 'active');
 
-        if (categoryId) {
-          query = query.eq('category_id', categoryId);
+        if (filterCategoryIds) {
+          query = query.in('category_id', filterCategoryIds);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false });

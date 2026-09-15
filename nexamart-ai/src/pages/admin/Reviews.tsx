@@ -101,7 +101,7 @@ export function AdminReviews() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString();
   const renderStars = (n: number) =>
     Array.from({ length: 5 }, (_, i) => (
-      <Star key={i} className={`w-4 h-4 ${i < n ? 'fill-yellow-400 text-warning' : 'text-muted-foreground'}`} />
+      <Star key={i} className={`w-4 h-4 ${i < n ? 'fill-warning text-warning' : 'text-muted-foreground'}`} />
     ));
 
   return (
@@ -114,7 +114,7 @@ export function AdminReviews() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by product or customer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Search by product or customer..." aria-label="Search reviews" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={dateFilter} onValueChange={setDateFilter}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Trash2, AlertCircle, CheckSquare } from 'lucide-react';
+import { Search, Trash2, AlertCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -89,6 +89,7 @@ export function AdminUsers() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkRoleTarget, setBulkRoleTarget] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -99,8 +100,9 @@ export function AdminUsers() {
         .select('*, vendors(id, is_verified)')
         .order('created_at', { ascending: false });
       setUsers(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -229,7 +231,7 @@ export function AdminUsers() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+           <Input placeholder="Search users by name or email…" aria-label="Search users" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -280,16 +282,28 @@ export function AdminUsers() {
         )}
       </AnimatePresence>
 
-      <Card className="bg-card border-border overflow-hidden">
-        {loading ? (
-          <TableSkeleton />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <AlertCircle className="w-12 h-12 mb-3 opacity-40" />
-            <p className="text-lg font-medium">No users found</p>
-            <p className="text-sm mt-1">Try adjusting your search or filter</p>
-          </div>
-        ) : (
+      {error && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (
+        <Card className="bg-card border-border overflow-hidden">
+          {loading ? (
+            <TableSkeleton />
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <AlertCircle className="w-12 h-12 mb-3 opacity-40" />
+              <p className="text-lg font-medium">No users found</p>
+              <p className="text-sm mt-1">Try adjusting your search or filter</p>
+            </div>
+          ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -377,7 +391,7 @@ export function AdminUsers() {
                                 <SelectItem value="admin">Admin</SelectItem>
                               </SelectContent>
                             </Select>
-                            <Button size="sm" variant="ghost" className="text-destructive hover:text-red-300 hover:bg-destructive/10" onClick={() => setDeleteTarget(u)} aria-label={`Delete user ${u.full_name || u.email}`}>
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(u)} aria-label={`Delete user ${u.full_name || u.email}`}>
                               <Trash2 aria-hidden="true" className="w-4 h-4" />
                             </Button>
                           </div>
@@ -395,6 +409,7 @@ export function AdminUsers() {
           </>
         )}
       </Card>
+      )}
 
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <DialogContent>

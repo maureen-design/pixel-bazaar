@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { useCart } from '../../context/CartContext';
 import { SafeImg } from '../SafeImg';
 import type { ProductVariants } from '../../types';
+import { formatPrice } from '../../config/pricing';
 
 export interface Recommendation {
   product_id: string;
@@ -30,13 +31,6 @@ interface ProductRecommendationCardProps {
 export function ProductRecommendationCard({ recommendation, index }: ProductRecommendationCardProps) {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
 
   const product = recommendation.product;
 

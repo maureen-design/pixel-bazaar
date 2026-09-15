@@ -23,6 +23,90 @@ function escapeLike(value: string): string {
 
 const SEARCH_COLUMNS = ['name', 'description', 'product_type', 'brand'];
 
+// ── Stemming: plural → singular for common e-commerce terms ──────────────────
+const PLURAL_MAP: Record<string, string> = {
+  blouses: 'blouse',
+  phones: 'phone',
+  dresses: 'dress',
+  shirts: 'shirt',
+  jackets: 'jacket',
+  hoodies: 'hoodie',
+  sneakers: 'sneaker',
+  laptops: 'laptop',
+  tablets: 'tablet',
+  monitors: 'monitor',
+  speakers: 'speaker',
+  keyboards: 'keyboard',
+  cameras: 'camera',
+  headphones: 'headphone',
+};
+
+// ── Synonyms: expand a token into additional search terms ────────────────────
+const SYNONYM_MAP: Record<string, string[]> = {
+  phone: ['smartphone'],
+  phones: ['smartphone'],
+  footwear: ['shoes'],
+  tops: ['tshirt', 'blouse', 'hoodie'],
+  top: ['tshirt', 'blouse', 'hoodie'],
+};
+
+function getExpandedTerms(token: string): string[] {
+  const lower = token.toLowerCase();
+  const terms = new Set<string>();
+  terms.add(lower);
+
+  // Apply stemming
+  const stemmed = PLURAL_MAP[lower];
+  if (stemmed) terms.add(stemmed);
+
+  // Apply synonyms (on both original and stemmed form)
+  const syns = SYNONYM_MAP[lower] || (stemmed ? SYNONYM_MAP[stemmed] : undefined);
+  if (syns) syns.forEach((s) => terms.add(s));
+
+  return Array.from(terms);
+}
+
+// ── Build a single token's filter: expanded terms × columns, all ORed ────────
+function buildTokenFilter(token: string): string {
+  const expanded = getExpandedTerms(token);
+  return expanded
+    .flatMap((term) => {
+      const escaped = escapeLike(term);
+      return SEARCH_COLUMNS.map((col) => `${col}.ilike.%${escaped}%`);
+    })
+    .join(',');
+}
+
+// ── Relevance scoring (client-side) ──────────────────────────────────────────
+function scoreProduct(product: any, tokens: string[]): number {
+  let score = 0;
+  const name = (product.name || '').toLowerCase();
+  const productType = (product.product_type || '').toLowerCase();
+  const brand = (product.brand || '').toLowerCase();
+  const description = (product.description || '').toLowerCase();
+
+  for (const token of tokens) {
+    const expanded = getExpandedTerms(token);
+    for (const term of expanded) {
+      if (name === term || name.startsWith(term + ' ') || name.endsWith(' ' + term)) score += 12;
+      else if (name.includes(term)) score += 8;
+
+      if (productType === term) score += 10;
+      else if (productType.includes(term)) score += 6;
+
+      if (brand === term) score += 10;
+      else if (brand.includes(term)) score += 6;
+
+      if (description.includes(term)) score += 2;
+    }
+  }
+
+  // Small boost for higher-rated products
+  score += (product.rating || 0) * 0.3;
+
+  return score;
+}
+
 export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
   const [data, setData] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,34 +149,84 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
     setError(null);
     setColorFallback(false);
 
+    // ── Category matching (precision-first) ────────────────────────────────
+    // Only include category-based results when:
+    //   a) single token that matches a category name/slug, OR
+    //   b) the full search term matches a category name/slug (e.g. "home living")
+    // This prevents "fashion blouse" from returning ALL Fashion products.
+    let categoryMatchIds: string[] | null = null;
+    if (hasSearchTerm) {
+      try {
+        const { data: allCategories } = await supabase
+          .from('categories')
+          .select('id, name, slug');
+        if (allCategories) {
+          const searchNorm = searchTermClean.toLowerCase();
+          const searchSlug = searchNorm.replace(/\s+/g, '-');
+
+          // Check if the full term matches a category name or slug exactly
+          const fullMatch = allCategories.find(
+            (cat) =>
+              cat.slug.toLowerCase() === searchSlug ||
+              cat.name.toLowerCase().replace(/\s+/g, '-') === searchSlug
+          );
+
+          if (fullMatch) {
+            // Full-term match: include this category regardless of token count
+            categoryMatchIds = [fullMatch.id];
+          } else if (tokens.length === 1) {
+            // Single token: check if it matches any category
+            const t = tokens[0].toLowerCase();
+            const matched = allCategories.filter(
+              (cat) =>
+                cat.name.toLowerCase().includes(t) ||
+                cat.slug.toLowerCase().includes(t)
+            );
+            if (matched.length > 0) {
+              categoryMatchIds = matched.map((c) => c.id);
+            }
+          }
+          // Multi-token, no full match: don't use category OR (relies on text search)
+        }
+      } catch {
+        // Non-critical — continue with text-only search
+      }
+    }
+
     const buildQuery = (withColor: boolean) => {
       let query = supabase
         .from('products')
-        .select(`
+        .select(
+          `
           *,
           vendors!inner (
             id,
             store_name,
-            store_logo
+            store_logo,
+            country
           ),
           categories!inner (
             id,
             name,
             slug
           )
-        `, { count: 'exact' })
+        `,
+          { count: 'exact' }
+        )
         .eq('status', 'active');
 
       if (hasSearchTerm) {
-        // Each token must match at least one indexed column (name, description,
-        // product_type, brand). Tokens are ANDed, columns are ORed within a token.
-        // PostgREST parses `or=(g1).and(g2)`; .or() adds the outer parens, so the
-        // first group must stay unwrapped — hence the ').and(' join.
-        const tokenExpressions = tokens.map((token) => {
-          const escaped = escapeLike(token);
-          return SEARCH_COLUMNS.map((col) => `${col}.ilike.%${escaped}%`).join(',');
-        });
-        query = query.or(tokenExpressions.join(').and('));
+        // Each token is expanded (stemmed + synonyms) and searched across all columns.
+        // Expanded terms within a token are ORed; tokens are ANDed.
+        const tokenFilters = tokens.map(buildTokenFilter);
+        const textFilter = tokenFilters.join(').and(');
+
+        if (categoryMatchIds && categoryMatchIds.length > 0) {
+          // Text matches OR belonging to a matched category
+          query = query.or(`(${textFilter}),(category_id.in.(${categoryMatchIds.join(',')}))`);
+        } else {
+          query = query.or(textFilter);
+        }
       }
 
       if (categoryId) {
@@ -119,29 +253,40 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         query = query.lte('price', safeMaxPrice);
       }
 
-      if (sortBy === 'name_asc') {
-        query = query.order('name', { ascending: true });
-      } else if (sortBy === 'price_asc') {
-        query = query.order('price', { ascending: true });
-      } else if (sortBy === 'price_desc') {
-        query = query.order('price', { ascending: false });
-      } else if (sortBy === 'rating') {
-        query = query.order('rating', { ascending: false });
-      } else {
-        query = query.order('created_at', { ascending: false });
+      // For relevance-sorted queries, fetch all matching rows then sort client-side.
+      // For explicit user-selected sorts, apply the DB sort.
+      const isDefaultSort = sortBy === 'newest' || sortBy === undefined;
+      if (!isDefaultSort) {
+        if (sortBy === 'name_asc') {
+          query = query.order('name', { ascending: true });
+        } else if (sortBy === 'price_asc') {
+          query = query.order('price', { ascending: true });
+        } else if (sortBy === 'price_desc') {
+          query = query.order('price', { ascending: false });
+        } else if (sortBy === 'rating') {
+          query = query.order('rating', { ascending: false });
+        }
       }
 
-      query = query.range(offset, offset + limit - 1);
+      // Fetch a larger pool for relevance sorting, then paginate client-side
+      if (isDefaultSort && hasSearchTerm) {
+        // Retrieve up to 200 rows for scoring, then slice to page
+        query = query.order('created_at', { ascending: false }).range(0, 199);
+      } else {
+        query = query.range(offset, offset + limit - 1);
+      }
 
       return query;
     };
 
-    const mapProducts = (results: any[] | null) => (results || []).map((product: any) => ({
-      ...product,
-      images: product.images && product.images.length > 0
-        ? product.images.map((img: string) => img.startsWith('http') ? img : `${STORAGE_URL}/${img}`)
-        : [PLACEHOLDER_IMAGE],
-    }));
+    const mapProducts = (results: any[] | null) =>
+      (results || []).map((product: any) => ({
+        ...product,
+        images:
+          product.images && product.images.length > 0
+            ? product.images.map((img: string) => (img.startsWith('http') ? img : `${STORAGE_URL}/${img}`))
+            : [PLACEHOLDER_IMAGE],
+      }));
 
     try {
       let finalData: any[] | null = null;
@@ -149,10 +294,6 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
       let usedFallback = false;
 
       if (normalizedColor) {
-        // First pass: the intended color-filtered query. On zero results OR when
-        // the color column is unavailable (migration pending / column missing),
-        // retry WITHOUT the color filter so the search experience is preserved.
-        // UI is notified via `colorFallback` so it never claims color matches.
         const colorQuery = buildQuery(true);
         const { data: colorData, error: colorError, count: colorCount } = await colorQuery;
 
@@ -175,8 +316,30 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         finalCount = count;
       }
 
-      setData(mapProducts(finalData));
-      setTotalCount(finalCount || 0);
+      // ── Relevance sort (client-side) for default sort ────────────────────
+      const isDefaultSort = sortBy === 'newest' || sortBy === undefined;
+      let displayData = finalData || [];
+      let displayCount = finalCount || 0;
+
+      if (isDefaultSort && hasSearchTerm && displayData.length > 0) {
+        // Score and sort
+        const scored = displayData.map((p: any) => ({ product: p, score: scoreProduct(p, tokens) }));
+        scored.sort((a: any, b: any) => b.score - a.score);
+
+        // Total count is the full scored set before pagination
+        displayCount = scored.length;
+
+        // Paginate
+        const pageStart = offset;
+        const pageEnd = pageStart + limit;
+        displayData = scored.slice(pageStart, pageEnd).map((s: any) => s.product);
+      } else if (!isDefaultSort) {
+        // DB-sorted results are already paginated
+        displayData = displayData;
+      }
+
+      setData(mapProducts(displayData));
+      setTotalCount(displayCount);
       setColorFallback(usedFallback);
     } catch (err: any) {
       setError(err.message);

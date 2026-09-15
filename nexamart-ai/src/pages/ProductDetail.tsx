@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight } from 'lucide-react';
+import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
@@ -10,14 +10,18 @@ import { Button } from '../components/ui/button';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { VariantSelector } from '../components/product/VariantSelector';
 import { ProductGallery } from '../components/product/ProductGallery';
 import { toast } from 'sonner';
+import { formatPrice } from '../config/pricing';
+import { SpeakButton } from '../components/ui/SpeakButton';
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { user } = useAuth();
   const { product, loading, error } = useProduct(id || '');
   const { products: relatedProducts } = useNewArrivals();
   const [quantity, setQuantity] = useState(1);
@@ -27,6 +31,10 @@ export function ProductDetail() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -69,11 +77,41 @@ export function ProductDetail() {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Explanation failed');
 
-      setExplanation(data.data.explanation);
+      const raw = data.data.explanation || '';
+      const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').replace(/^\s*[-*]\s+/gm, '');
+      setExplanation(clean);
     } catch (err: any) {
       toast.error('AI explanation unavailable. Try again later.');
     } finally {
       setExplaining(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user || !id) return;
+    if (reviewRating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const { error } = await supabase.from('reviews').insert({
+        product_id: id,
+        user_id: user.id,
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+        is_approved: false,
+        is_hidden: false,
+      });
+      if (error) throw error;
+      toast.success('Review submitted! It will appear after moderation.');
+      setReviewRating(0);
+      setReviewComment('');
+      setShowReviewForm(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit review');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -98,23 +136,16 @@ export function ProductDetail() {
     );
   }
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
-
   const renderStars = (rating: number) => {
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
 
     for (let i = 0; i < fullStars; i++) {
-      stars.push(<Star key={i} className="w-5 h-5 fill-yellow-400 text-warning" />);
+      stars.push(<Star key={i} className="w-5 h-5 fill-warning text-warning" />);
     }
     if (hasHalfStar) {
-      stars.push(<StarHalf key="half" className="w-5 h-5 fill-yellow-400 text-warning" />);
+      stars.push(<StarHalf key="half" className="w-5 h-5 fill-warning text-warning" />);
     }
     const emptyStars = 5 - Math.ceil(rating);
     for (let i = 0; i < emptyStars; i++) {
@@ -297,9 +328,12 @@ export function ProductDetail() {
                       <Sparkles aria-hidden="true" className="w-3 h-3" />
                       AI Explanation
                     </span>
-                    <button onClick={() => setExplanation(null)} aria-label="Dismiss explanation">
-                      <X aria-hidden="true" className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <SpeakButton text={explanation} label="Read explanation aloud" />
+                      <button onClick={() => setExplanation(null)} aria-label="Dismiss explanation">
+                        <X aria-hidden="true" className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                      </button>
+                    </div>
                   </div>
                   <p className="whitespace-pre-line">{explanation}</p>
                 </div>
@@ -432,7 +466,80 @@ export function ProductDetail() {
 
         {/* Reviews Section */}
         <div className="mt-16">
-          <h2 className="text-2xl font-bold mb-6">Customer Reviews ({reviews.length})</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold">Customer Reviews ({reviews.length})</h2>
+            {user && (
+              <Button
+                onClick={() => setShowReviewForm(!showReviewForm)}
+                variant="outline"
+                size="sm"
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Write a Review
+              </Button>
+            )}
+          </div>
+
+          {/* Review Form */}
+          {showReviewForm && (
+            <div className="bg-card rounded-lg p-6 border border-border mb-6">
+              <h3 className="text-lg font-semibold mb-4">Write Your Review</h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Rating</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="focus:outline-none"
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          star <= reviewRating
+                            ? 'fill-warning text-warning'
+                            : 'text-muted-foreground hover:text-warning'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Comment (optional)</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share your experience with this product..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary min-h-[100px]"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSubmitReview}
+                  disabled={submittingReview || reviewRating === 0}
+                  size="sm"
+                >
+                  {submittingReview ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  Submit Review
+                </Button>
+                <Button
+                  onClick={() => setShowReviewForm(false)}
+                  variant="ghost"
+                  size="sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Your review will appear after moderation.
+              </p>
+            </div>
+          )}
           {reviewsLoading ? (
             <div className="text-center py-8"><div className="h-8 w-8 animate-spin border-4 border-primary border-t-transparent rounded-full mx-auto" /></div>
           ) : reviews.length === 0 ? (
@@ -456,7 +563,7 @@ export function ProductDetail() {
                     </div>
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <Star key={star} className={`w-4 h-4 ${star <= r.rating ? 'fill-yellow-400 text-warning' : 'text-muted-foreground'}`} />
+                        <Star key={star} className={`w-4 h-4 ${star <= r.rating ? 'fill-warning text-warning' : 'text-muted-foreground'}`} />
                       ))}
                     </div>
                   </div>

@@ -10,6 +10,7 @@ import { ProductForm } from '../../components/vendor/ProductForm';
 import { Dialog, DialogContent } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import { formatPrice } from '../../config/pricing';
 
 interface Product {
   id: string;
@@ -197,13 +198,6 @@ export function VendorProducts() {
     });
   }, [products, searchQuery, statusFilter, sortKey, sortDir]);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
-
   const getStockBadge = (qty: number) => {
     if (qty === 0) return 'bg-destructive/20 text-destructive';
     if (qty <= 5) return 'bg-warning/20 text-warning';
@@ -282,7 +276,7 @@ export function VendorProducts() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search products..."
+            placeholder="Search your products by name…"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);

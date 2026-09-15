@@ -3,6 +3,7 @@ import { Search as SearchIcon, Check, X } from 'lucide-react';
 import { useCompareProducts } from '../../hooks/useProducts';
 import type { Product } from '../../types';
 import { cn } from '../../lib/utils';
+import { formatPrice } from '../../config/pricing';
 
 interface ProductSelectorProps {
   selected: Product[];
@@ -13,9 +14,6 @@ interface ProductSelectorProps {
 export function ProductSelector({ selected, onToggle, max = 3 }: ProductSelectorProps) {
   const [query, setQuery] = useState('');
   const { products, loading } = useCompareProducts(query, selected.map((p) => p.id), 10);
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(price);
 
   const filtered = products;
 

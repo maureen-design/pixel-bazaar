@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Trash2, Eye, Download, PackageSearch, CheckSquare, Edit2 } from 'lucide-react';
+import { Search, Trash2, Eye, Download, PackageSearch, CheckSquare, Edit2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -12,6 +12,7 @@ import { Pagination } from '../../components/ui/pagination';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
+import { formatPrice } from '../../config/pricing';
 
 const PAGE_SIZE = 15;
 
@@ -30,6 +31,7 @@ export function AdminProducts() {
   const [editTarget, setEditTarget] = useState<any>(null);
   const [editForm, setEditForm] = useState({ name: '', description: '', price: '', stock_quantity: '', status: '' });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchProducts(); }, []);
 
@@ -40,8 +42,9 @@ export function AdminProducts() {
         .select('*, vendors(store_name), categories(name)')
         .order('created_at', { ascending: false });
       setProducts(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -173,8 +176,6 @@ export function AdminProducts() {
 
   useEffect(() => { setSelectedIds(new Set()); }, [search, statusFilter, categoryFilter, vendorFilter]);
 
-  const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
-
   const getStatusVariant = (s: string) => {
     if (s === 'active') return 'default' as const;
     if (s === 'draft') return 'secondary' as const;
@@ -211,7 +212,7 @@ export function AdminProducts() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+           <Input placeholder="Search products by name…" aria-label="Search products" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
@@ -279,32 +280,44 @@ export function AdminProducts() {
         )}
       </AnimatePresence>
 
-      <Card className="bg-card border-border overflow-hidden">
-        {loading ? (
-          <div className="p-4" aria-live="polite" aria-busy="true">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 py-4 border-b border-border last:border-0">
-                <Skeleton className="h-10 w-10 rounded-lg flex-shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-24" />
+      {error && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (
+        <Card className="bg-card border-border overflow-hidden">
+          {loading ? (
+            <div className="p-4" aria-live="polite" aria-busy="true">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 py-4 border-b border-border last:border-0">
+                  <Skeleton className="h-10 w-10 rounded-lg flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-16 rounded" />
                 </div>
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-6 w-16 rounded-full" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-8 w-16 rounded" />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground" role="status">
-            <PackageSearch className="w-12 h-12 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No products found</p>
-            <p className="text-sm mt-1">Try adjusting your filters or search query</p>
-          </div>
-        ) : (
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground" role="status">
+              <PackageSearch className="w-12 h-12 mb-4 opacity-50" />
+              <p className="text-lg font-medium">No products found</p>
+              <p className="text-sm mt-1">Try adjusting your filters or search query</p>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -354,7 +367,7 @@ export function AdminProducts() {
                       <div className="flex items-center justify-end gap-2">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit2 className="w-4 h-4" /></Button>
                         <Link to={`/product/${p.id}`}><Button size="sm" variant="ghost"><Eye className="w-4 h-4" /></Button></Link>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-red-300 hover:bg-destructive/10" onClick={() => setDeleteTarget(p)}>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(p)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -366,6 +379,7 @@ export function AdminProducts() {
           </div>
         )}
       </Card>
+      )}
 
       {!loading && filtered.length > 0 && (
         <div className="flex items-center justify-between">

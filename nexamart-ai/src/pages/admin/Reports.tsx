@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../../components/ui/skeleton';
 import { motion } from 'motion/react';
 import { useSettings } from '../../hooks/useSettings';
+import { formatPrice } from '../../config/pricing';
 import {
   AreaChart,
   Area,
@@ -20,10 +21,10 @@ import {
 } from 'recharts';
 
 const statColorMap: Record<string, { bg: string; text: string }> = {
-  emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-500' },
-  blue: { bg: 'bg-blue-500/20', text: 'text-blue-500' },
-  green: { bg: 'bg-green-500/20', text: 'text-green-500' },
-  purple: { bg: 'bg-purple-500/20', text: 'text-purple-500' },
+  emerald: { bg: 'bg-success/20', text: 'text-success' },
+  blue: { bg: 'bg-primary/20', text: 'text-primary' },
+  green: { bg: 'bg-success/20', text: 'text-success' },
+  purple: { bg: 'bg-ai/20', text: 'text-ai' },
 };
 
 function formatKES(price: number) {
@@ -173,8 +174,6 @@ export function AdminReports() {
       setLoading(false);
     }
   };
-
-  const formatPrice = (price: number) => formatKES(price);
 
   const exportCSV = () => {
     const headers = 'Metric,Value\n';

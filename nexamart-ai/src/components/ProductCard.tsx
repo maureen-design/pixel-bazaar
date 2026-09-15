@@ -4,9 +4,12 @@ import { motion } from 'motion/react';
 import type { Product } from '../types';
 import { AddToCartButton } from './AddToCartButton';
 import { WishlistButton } from './WishlistButton';
+import { CompareButton } from './CompareButton';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { SafeImg } from './SafeImg';
+import { countryFlag } from '../utils/flags';
+import { formatPrice } from '../config/pricing';
 
 interface ProductCardProps {
   product: Product;
@@ -14,13 +17,6 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const navigate = useNavigate();
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
-  };
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -102,7 +98,8 @@ export function ProductCard({ product }: ProductCardProps) {
               </Badge>
             </div>
           )}
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-2 right-2 flex flex-col gap-1">
+            <CompareButton product={product} />
             <WishlistButton productId={product.id} />
           </div>
         </div>
@@ -113,6 +110,11 @@ export function ProductCard({ product }: ProductCardProps) {
           </h3>
           
           <p className="text-muted-foreground text-sm mb-2">
+            {countryFlag(product.vendor?.country) && (
+              <span className="mr-1" role="img" aria-label={product.vendor?.country ?? undefined}>
+                {countryFlag(product.vendor?.country)}
+              </span>
+            )}
             {product.vendor?.store_name}
             <span className="text-muted-foreground/60 ml-2">{timeAgo(product.created_at)}</span>
           </p>

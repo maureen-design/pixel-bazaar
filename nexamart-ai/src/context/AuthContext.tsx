@@ -78,6 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
+
+    // Send welcome email (non-blocking)
+    supabase.functions.invoke('send-welcome-email', {
+      body: { email, full_name: fullName },
+    }).catch(() => {});
   };
 
   const signOut = async () => {

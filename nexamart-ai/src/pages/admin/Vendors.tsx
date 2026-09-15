@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Store, Check, X, Eye, StoreIcon, CheckSquare } from 'lucide-react';
+import { Search, Store, Check, X, Eye, StoreIcon, CheckSquare, MessageSquare, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Pagination } from '../../components/ui/pagination';
@@ -11,12 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
+import { formatPrice } from '../../config/pricing';
 
 const PAGE_SIZE = 15;
 
-const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
-
 export function AdminVendors() {
+  const { user } = useAuth();
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -26,6 +27,9 @@ export function AdminVendors() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState<'approve' | 'reject' | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState<{ vendorId: string; vendorName: string } | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchVendors(); }, []);
 
@@ -36,8 +40,9 @@ export function AdminVendors() {
         .select('*, profiles!inner(full_name, email, created_at)')
         .order('created_at', { ascending: false });
       setVendors(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -46,14 +51,35 @@ export function AdminVendors() {
   const approveVendor = async (id: string) => {
     const { error } = await supabase.rpc('approve_vendor', { target_vendor_id: id });
     if (error) { toast.error('Failed to approve'); return; }
+    // Log the action
+    await supabase.from('activity_logs').insert({
+      user_id: user?.id || null,
+      user_email: user?.email || null,
+      action: 'vendor_approve',
+      details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name },
+    });
     toast.success('Vendor approved');
+    supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: id, action: 'approved' } }).catch(() => {});
     fetchVendors();
   };
 
-  const rejectVendor = async (id: string) => {
+  const rejectVendor = async (id: string, reason?: string) => {
     const { error } = await supabase.rpc('reject_vendor', { target_vendor_id: id });
     if (error) { toast.error('Failed to reject'); return; }
+    // Update rejection count and timestamp
+    await supabase.from('vendors').update({
+      rejection_reason: reason || null,
+      last_rejected_at: new Date().toISOString(),
+    }).eq('id', id);
+    // Log the action
+    await supabase.from('activity_logs').insert({
+      user_id: user?.id || null,
+      user_email: user?.email || null,
+      action: 'vendor_reject',
+      details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name, reason: reason || null },
+    });
     toast.success('Vendor rejected');
+    supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: id, action: 'rejected', reason: reason || null } }).catch(() => {});
     fetchVendors();
   };
 
@@ -115,7 +141,17 @@ export function AdminVendors() {
 
     for (const id of ids) {
       const { error } = await supabase.rpc(action, { target_vendor_id: id });
-      if (error) failures++;
+      if (error) {
+        failures++;
+      } else {
+        // Log the action
+        await supabase.from('activity_logs').insert({
+          user_id: user?.id || null,
+          user_email: user?.email || null,
+          action: bulkConfirmOpen === 'approve' ? 'vendor_approve' : 'vendor_reject',
+          details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name, bulk: true },
+        });
+      }
     }
 
     if (failures > 0) {
@@ -140,7 +176,7 @@ export function AdminVendors() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search vendors..." value={search} onChange={(e) => handleSearchChange(e.target.value)} className="pl-10" />
+          <Input placeholder="Search vendors by business name or email…" aria-label="Search vendors" value={search} onChange={(e) => handleSearchChange(e.target.value)} className="pl-10" />
         </div>
         <Select value={statusFilter} onValueChange={handleStatusChange}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -181,41 +217,53 @@ export function AdminVendors() {
         )}
       </AnimatePresence>
 
-      <Card className="bg-card border-border overflow-hidden">
-        {loading ? (
-          <div className="p-4">
-            <div className="space-y-3">
-              <div className="flex gap-4">
-                <Skeleton className="h-4 w-[40px]" />
-                <Skeleton className="h-4 w-[200px]" />
-                <Skeleton className="h-4 w-[120px]" />
-                <Skeleton className="h-4 w-[180px]" />
-                <Skeleton className="h-4 w-[80px]" />
-                <Skeleton className="h-4 w-[60px]" />
-                <Skeleton className="h-4 w-[100px]" />
-                <Skeleton className="h-4 w-[100px]" />
-              </div>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton className="h-10 w-[40px]" />
-                  <Skeleton className="h-10 w-[200px]" />
-                  <Skeleton className="h-10 w-[120px]" />
-                  <Skeleton className="h-10 w-[180px]" />
-                  <Skeleton className="h-10 w-[80px]" />
-                  <Skeleton className="h-10 w-[60px]" />
-                  <Skeleton className="h-10 w-[100px]" />
-                  <Skeleton className="h-10 w-[100px]" />
+      {error && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (
+        <Card className="bg-card border-border overflow-hidden">
+          {loading ? (
+            <div className="p-4">
+              <div className="space-y-3">
+                <div className="flex gap-4">
+                  <Skeleton className="h-4 w-[40px]" />
+                  <Skeleton className="h-4 w-[200px]" />
+                  <Skeleton className="h-4 w-[120px]" />
+                  <Skeleton className="h-4 w-[180px]" />
+                  <Skeleton className="h-4 w-[80px]" />
+                  <Skeleton className="h-4 w-[60px]" />
+                  <Skeleton className="h-4 w-[100px]" />
+                  <Skeleton className="h-4 w-[100px]" />
                 </div>
-              ))}
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex gap-4">
+                    <Skeleton className="h-10 w-[40px]" />
+                    <Skeleton className="h-10 w-[200px]" />
+                    <Skeleton className="h-10 w-[120px]" />
+                    <Skeleton className="h-10 w-[180px]" />
+                    <Skeleton className="h-10 w-[80px]" />
+                    <Skeleton className="h-10 w-[60px]" />
+                    <Skeleton className="h-10 w-[100px]" />
+                    <Skeleton className="h-10 w-[100px]" />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-            <StoreIcon className="w-12 h-12 mb-3 opacity-50" />
-            <p className="text-lg font-medium">No vendors found</p>
-            <p className="text-sm">Try adjusting your search or filter criteria</p>
-          </div>
-        ) : (
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
+              <StoreIcon className="w-12 h-12 mb-3 opacity-50" />
+              <p className="text-lg font-medium">No vendors found</p>
+              <p className="text-sm">Try adjusting your search or filter criteria</p>
+            </div>
+          ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -286,10 +334,10 @@ export function AdminVendors() {
                             {!v.is_verified ? (
                               <>
                                 <Button size="sm" className="gap-1" onClick={() => approveVendor(v.id)} aria-label={`Approve ${v.business_name || v.store_name}`}><Check aria-hidden="true" className="w-4 h-4" /></Button>
-                                <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => rejectVendor(v.id)} aria-label={`Reject ${v.business_name || v.store_name}`}><X aria-hidden="true" className="w-4 h-4" /></Button>
+                                <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => { setRejectionReason(''); setRejectDialogOpen({ vendorId: v.id, vendorName: v.business_name || v.store_name }); }} aria-label={`Reject ${v.business_name || v.store_name}`}><X aria-hidden="true" className="w-4 h-4" /></Button>
                               </>
                             ) : (
-                              <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => rejectVendor(v.id)}><X className="w-4 h-4" /> Revoke</Button>
+                              <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => { setRejectionReason(''); setRejectDialogOpen({ vendorId: v.id, vendorName: v.business_name || v.store_name }); }}><X className="w-4 h-4" /> Revoke</Button>
                             )}
                           </div>
                         </td>
@@ -303,6 +351,7 @@ export function AdminVendors() {
           </>
         )}
       </Card>
+      )}
 
       <Dialog open={!!selectedVendor} onOpenChange={() => setSelectedVendor(null)}>
         <DialogContent>
@@ -357,6 +406,48 @@ export function AdminVendors() {
             >
               {bulkProcessing ? 'Processing...' : bulkConfirmOpen === 'approve' ? 'Approve' : 'Reject'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Reason Dialog */}
+      <Dialog open={rejectDialogOpen !== null} onOpenChange={() => { if (!bulkProcessing) { setRejectDialogOpen(null); setRejectionReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject {rejectDialogOpen?.vendorName}</DialogTitle>
+            <DialogDescription>
+              Provide a reason for rejection. This will be included in the email sent to the vendor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <MessageSquare className="w-4 h-4 inline mr-1" />
+                Rejection Reason (optional)
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g. Please provide more details about your business and product categories."
+                rows={3}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setRejectDialogOpen(null); setRejectionReason(''); }}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (rejectDialogOpen) {
+                    rejectVendor(rejectDialogOpen.vendorId, rejectionReason.trim() || undefined);
+                    setRejectDialogOpen(null);
+                    setRejectionReason('');
+                  }
+                }}
+              >
+                Reject Vendor
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

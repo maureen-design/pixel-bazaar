@@ -10,7 +10,7 @@ import { Separator } from '../components/ui/separator';
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
-import { Sun, Moon, Bell, Shield } from 'lucide-react';
+import { Sun, Moon, Bell, UserCircle } from 'lucide-react';
 
 export function Settings() {
   const { user, profile } = useAuth();
@@ -117,7 +117,7 @@ export function Settings() {
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" />
+                <UserCircle className="w-5 h-5 text-primary" />
                 Profile Information
               </CardTitle>
             </CardHeader>
@@ -222,6 +222,9 @@ export function Settings() {
                 <div key={key} className="flex items-center justify-between">
                   <span className="text-sm">{label}</span>
                   <button
+                    role="switch"
+                    aria-checked={notifications[key as keyof typeof notifications]}
+                    aria-label={label}
                     onClick={() =>
                       setNotifications((prev) => ({
                         ...prev,
@@ -260,6 +263,9 @@ export function Settings() {
               <div className="flex items-center justify-between">
                 <span className="text-sm">Dark Mode</span>
                 <button
+                  role="switch"
+                  aria-checked={isDark}
+                  aria-label="Toggle dark mode"
                   onClick={toggleTheme}
                   className={`w-12 h-6 rounded-full transition-colors ${
                     isDark ? 'bg-primary' : 'bg-muted'

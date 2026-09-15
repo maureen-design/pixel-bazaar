@@ -156,7 +156,7 @@ function totalsRows(order: any, site: any): string {
   return rows.join('');
 }
 
-function generateCustomerEmail(order: any, customer: any, items: any[], site: any, isCancellation: boolean = false) {
+function generateCustomerEmail(order: any, customer: any, items: any[], site: any, isCancellation: boolean = false, isPaymentSuccessful: boolean = false) {
   const itemRows = items
     .map(
       (item) => `
@@ -177,6 +177,8 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
   const isBankPending = order.payment_method === 'bank' && order.payment_status !== 'paid';
   const headerTitle = isCancellation
     ? 'Order Cancelled'
+    : isPaymentSuccessful
+    ? 'Payment Received'
     : isBankPending
     ? 'Order Received — Bank Transfer Pending'
     : isPayLater
@@ -188,6 +190,8 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
 
   const bodyText = isCancellation
     ? `Your order <strong>#${escapeHtml(order.order_number)}</strong> has been cancelled because payment was not received before the deadline. Your items have been released back to inventory.`
+    : isPaymentSuccessful
+    ? `We've successfully received your payment for order <strong>#${escapeHtml(order.order_number)}</strong>. The vendor has been notified and will start preparing your order.`
     : isBankPending
     ? `Thank you for your order! Please complete the bank transfer using the details below within <strong>${escapeHtml(deadline)}</strong>.`
     : isPayLater
@@ -225,7 +229,7 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
   <style>
     body { font-family: Arial, sans-serif; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
     .container { max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; padding: 40px; border: 1px solid #334155; }
-    .header { border-bottom: 2px solid #334155; padding-bottom: 20px; }
+    .header { border-bottom: 2px solid #334155; padding-bottom: 20px; margin-bottom: 20px; text-align: center; }
     .logo { font-size: 28px; font-weight: bold; color: #60a5fa; }
     table { width: 100%; border-collapse: collapse; margin: 16px 0; }
     th { background-color: #334155; padding: 10px 12px; text-align: left; font-weight: 600; color: #f1f5f9; }
@@ -238,11 +242,16 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
 <body>
   <div class="container">
     <div class="header">
-      <h1 style="text-align: center;">${headerTitle}</h1>
-      <p style="text-align: center; font-size: 16px; color: #f1f5f9; font-weight: bold;">Order #${escapeHtml(order.order_number)}</p>
-      <p style="text-align: center; color: #94a3b8; font-size: 14px;">
-        ${new Date(order.created_at).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}
-      </p>
+      <div style="display:inline-block;width:48px;height:48px;background:#0B1A2B;border-radius:10px;overflow:hidden;vertical-align:middle;">
+        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+          <rect width="64" height="64" rx="14" fill="#0B1A2B"/>
+          <path d="M14 16v32M14 16l22 32M36 16v32" stroke="#2563EB" stroke-width="4.5" stroke-linecap="square"/>
+          <path d="M50 16v32M50 16L28 48M36 16v32" stroke="#D4A853" stroke-width="4.5" stroke-linecap="square"/>
+          <rect x="33" y="29" width="6" height="6" rx="1" transform="rotate(45 36 32)" fill="#D4A853" opacity="0.5"/>
+        </svg>
+      </div>
+      <h1 style="margin: 12px 0 0; font-size: 24px;">${headerTitle}</h1>
+      <p style="font-size: 14px; color: #94a3b8; margin: 4px 0 0;">Order #${escapeHtml(order.order_number)}</p>
     </div>
     <p>Dear ${escapeHtml(customer.full_name || 'Customer')},</p>
     <p>${bodyText}</p>
@@ -263,9 +272,9 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
     <div class="address-block">${addressBlock}</div>
     ${paymentMethod ? `<h3>Payment Method</h3><p style="color: #cbd5e1;">${escapeHtml(paymentMethod)}</p>` : ''}
     ${paymentStatus}
-    ${!isCancellation ? `<a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/orders" class="button">${isPayLater ? 'Complete Payment' : 'View Your Orders'}</a>` : ''}
+    ${!isCancellation ? `<a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/auth/redirect?to=${encodeURIComponent(`/orders/${order.order_number}`)}" class="button">${isPayLater ? 'View Payment Details' : isBankPending ? 'View Payment Instructions' : 'View My Order'}</a>` : ''}
     <div class="footer">
-      <p>${isCancellation ? 'If you still want to purchase these items, please place a new order.' : isBankPending ? 'Please complete your bank transfer before the deadline.' : isPayLater ? 'Please complete your payment before the deadline to avoid cancellation.' : "We'll notify you once your order ships."}</p>
+      <p>${isCancellation ? 'If you still want to purchase these items, please place a new order.' : isPaymentSuccessful ? "We'll notify you once your order ships." : isBankPending ? 'Please complete your bank transfer before the deadline.' : isPayLater ? 'Please complete your payment before the deadline to avoid cancellation.' : "We'll notify you once your order ships."}</p>
       <p>Thank you for shopping with ${escapeHtml(site.name)}!</p>
       <p style="font-size: 12px;">Support: ${escapeHtml(site.supportEmail)}</p>
     </div>
@@ -275,7 +284,7 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
   `;
 }
 
-function generateVendorEmail(order: any, customer: any, items: any[], site: any, isCancellation: boolean = false) {
+function generateVendorEmail(order: any, customer: any, items: any[], site: any, isCancellation: boolean = false, isPaymentSuccessful: boolean = false) {
   const itemRows = items
     .map(
       (item) => `
@@ -296,6 +305,8 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
   const isBankPending = order.payment_method === 'bank' && order.payment_status !== 'paid';
   const headerTitle = isCancellation
     ? 'Order Cancelled'
+    : isPaymentSuccessful
+    ? 'Payment Received'
     : isBankPending
     ? 'New Bank Transfer Order — Payment Pending'
     : isPayLater
@@ -303,6 +314,8 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
     : 'New Order Received!';
   const bodyText = isCancellation
     ? `Order #${escapeHtml(order.order_number)} has been cancelled because the customer did not complete bank transfer payment before the deadline. No action required.`
+    : isPaymentSuccessful
+    ? `Payment has been received for order #${escapeHtml(order.order_number)}. Please prepare the items for shipment.`
     : isBankPending
     ? 'You have received a new order. Payment is pending — the customer must complete a bank transfer. Please hold preparation until payment is confirmed by an admin.'
     : isPayLater
@@ -326,7 +339,7 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
   <style>
     body { font-family: Arial, sans-serif; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
     .container { max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; padding: 40px; border: 1px solid #334155; }
-    .header { border-bottom: 2px solid #334155; padding-bottom: 20px; }
+    .header { border-bottom: 2px solid #334155; padding-bottom: 20px; margin-bottom: 20px; text-align: center; }
     .logo { font-size: 28px; font-weight: bold; color: #60a5fa; }
     table { width: 100%; border-collapse: collapse; margin: 16px 0; }
     th { background-color: #334155; padding: 10px 12px; text-align: left; font-weight: 600; color: #f1f5f9; }
@@ -338,8 +351,16 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
 <body>
   <div class="container">
     <div class="header">
-      <h1 style="text-align: center;">${headerTitle}</h1>
-      <p style="text-align: center; font-size: 16px; color: #f1f5f9; font-weight: bold;">Order #${escapeHtml(order.order_number)}</p>
+      <div style="display:inline-block;width:48px;height:48px;background:#0B1A2B;border-radius:10px;overflow:hidden;vertical-align:middle;">
+        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+          <rect width="64" height="64" rx="14" fill="#0B1A2B"/>
+          <path d="M14 16v32M14 16l22 32M36 16v32" stroke="#2563EB" stroke-width="4.5" stroke-linecap="square"/>
+          <path d="M50 16v32M50 16L28 48M36 16v32" stroke="#D4A853" stroke-width="4.5" stroke-linecap="square"/>
+          <rect x="33" y="29" width="6" height="6" rx="1" transform="rotate(45 36 32)" fill="#D4A853" opacity="0.5"/>
+        </svg>
+      </div>
+      <h1 style="margin: 12px 0 0; font-size: 24px;">${headerTitle}</h1>
+      <p style="font-size: 14px; color: #94a3b8; margin: 4px 0 0;">Order #${escapeHtml(order.order_number)}</p>
     </div>
     <p>Dear Vendor,</p>
     <p>${bodyText}</p>
@@ -358,8 +379,9 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
     ${paymentMethod ? `<p><strong>Payment Method:</strong> ${escapeHtml(paymentMethod)}</p>` : ''}
     ${paymentStatus}
     <div class="address-block">${addressBlock}</div>
+    ${!isCancellation ? `<div style="text-align: center; margin: 24px 0;"><a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/vendor/orders" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Order</a></div>` : ''}
     <div class="footer">
-      <p>${isCancellation ? 'Order has been cancelled.' : isBankPending ? 'Please wait for admin verification before preparing this order.' : isPayLater ? 'Please wait for payment confirmation before processing this order.' : 'Please process this order as soon as possible.'}</p>
+      <p>${isCancellation ? 'Order has been cancelled.' : isPaymentSuccessful ? 'Please process this order as soon as possible.' : isBankPending ? 'Please wait for admin verification before preparing this order.' : isPayLater ? 'Please wait for payment confirmation before processing this order.' : 'Please process this order as soon as possible.'}</p>
       <p>${escapeHtml(site.name)} Team</p>
     </div>
   </div>
@@ -521,9 +543,13 @@ serve(async (req) => {
     const isPayLater = order.payment_type === 'later' && order.payment_status !== 'paid';
     const isBankPending = order.payment_method === 'bank' && order.payment_status !== 'paid';
     const isCancellation = body?.cancellation === true;
+    // Payment successful: order was pay-later or bank-pending, now paid
+    const isPaymentSuccessful = !isCancellation && order.payment_status === 'paid' && order.email_sent === false && (body?.payment_type === 'later' || body?.payment_method === 'bank');
 
     const customerSubject = isCancellation
       ? `Order Cancelled — Payment Not Received #${order.order_number}`
+      : isPaymentSuccessful
+      ? `Payment Received — Order #${order.order_number} Confirmed`
       : isBankPending
       ? `Order Received — Bank Transfer Pending #${order.order_number}`
       : isPayLater
@@ -531,6 +557,8 @@ serve(async (req) => {
       : `Order Confirmed! #${order.order_number}`;
     const vendorSubject = isCancellation
       ? `Order Cancelled #${order.order_number}`
+      : isPaymentSuccessful
+      ? `Payment Received — Order #${order.order_number}`
       : isBankPending
       ? `New Bank Transfer Order — Payment Pending #${order.order_number}`
       : isPayLater
@@ -541,7 +569,7 @@ serve(async (req) => {
       from: `"${site.name}" <${Deno.env.get('EMAIL_USER')}>`,
       to: customer.email,
       subject: customerSubject,
-      html: generateCustomerEmail(order, customer, items, site, isCancellation),
+      html: generateCustomerEmail(order, customer, items, site, isCancellation, isPaymentSuccessful),
     });
 
     console.log('Customer email sent:', customerEmailResult.messageId);
@@ -551,7 +579,7 @@ serve(async (req) => {
         from: `"${site.name}" <${Deno.env.get('EMAIL_USER')}>`,
         to: vendor.store_email,
         subject: vendorSubject,
-        html: generateVendorEmail(order, customer, items, site, isCancellation),
+        html: generateVendorEmail(order, customer, items, site, isCancellation, isPaymentSuccessful),
       });
       console.log('Vendor email sent:', vendorEmailResult.messageId);
     } else {
@@ -562,6 +590,7 @@ serve(async (req) => {
     // resend. Only set after the customer confirmation email succeeded.
     // For Pay Later and Bank Transfer creation emails, do NOT set email_sent=true:
     // the post-payment confirmation email still needs to be sent.
+    // For Payment Successful emails, set email_sent=true to prevent future duplicates.
     if (!isPayLater && !isBankPending) {
       await supabase.from('orders').update({ email_sent: true }).eq('id', order.id);
     }

@@ -11,7 +11,7 @@ interface CategoryStripProps {
 }
 
 export function CategoryStrip({ selectedCategory, onCategorySelect, counts }: CategoryStripProps) {
-  const { categories, loading } = useCategories();
+  const { categories, loading } = useCategories({ topLevelOnly: true });
 
   const totalCount = Object.values(counts).reduce((sum, c) => sum + c, 0);
 

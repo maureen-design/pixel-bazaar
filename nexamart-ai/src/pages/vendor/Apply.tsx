@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store, FileText, CheckCircle } from 'lucide-react';
+import { Store, Clock, CheckCircle, MapPin, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
@@ -9,6 +9,20 @@ import { Navbar } from '../../components/Navbar';
 import { Footer } from '../../components/Footer';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+
+const PRODUCT_CATEGORIES = [
+  'Electronics & Gadgets',
+  'Fashion & Clothing',
+  'Home & Kitchen',
+  'Beauty & Personal Care',
+  'Sports & Outdoors',
+  'Books & Stationery',
+  'Toys & Games',
+  'Automotive',
+  'Health & Wellness',
+  'Food & Groceries',
+  'Other',
+];
 
 export function VendorApply() {
   const navigate = useNavigate();
@@ -20,6 +34,8 @@ export function VendorApply() {
     business_name: '',
     business_description: '',
     phone: '',
+    city: '',
+    main_categories: [] as string[],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -43,7 +59,7 @@ export function VendorApply() {
             className="bg-card rounded-xl p-8 border border-border text-center"
           >
             <div className="w-16 h-16 bg-warning/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <FileText className="w-8 h-8 text-warning" />
+              <Clock className="w-8 h-8 text-warning" />
             </div>
             <h1 className="text-2xl font-bold mb-4">Application Under Review</h1>
             <p className="text-muted-foreground mb-6">
@@ -69,6 +85,12 @@ export function VendorApply() {
     }
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
+    }
+    if (!formData.city.trim()) {
+      newErrors.city = 'City/Location is required';
+    }
+    if (formData.main_categories.length === 0) {
+      newErrors.main_categories = 'Select at least one product category';
     }
 
     setErrors(newErrors);
@@ -106,6 +128,9 @@ export function VendorApply() {
         user_id: user.id,
         store_name: formData.business_name,
         store_description: formData.business_description,
+        phone: formData.phone.trim(),
+        city: formData.city.trim(),
+        main_categories: formData.main_categories.join(', '),
         is_verified: false,
       });
 
@@ -113,6 +138,16 @@ export function VendorApply() {
 
       setSubmitted(true);
       toast.success('Application submitted successfully!');
+      supabase.functions.invoke('send-admin-notification', {
+        body: {
+          event: 'new_vendor_application',
+          data: {
+            store_name: formData.business_name,
+            business_name: formData.business_name,
+            applicant_name: user.email || 'Vendor',
+          },
+        },
+      }).catch(() => {});
     } catch (error: any) {
       console.error('Application error:', error);
       toast.error(error.message || 'Failed to submit application');
@@ -194,7 +229,7 @@ export function VendorApply() {
                 placeholder="Describe your business and the products you sell"
                 rows={4}
                 className={`w-full px-4 py-3 bg-muted border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground ${
-                  errors.business_description ? 'border-red-500' : 'border-border'
+                  errors.business_description ? 'border-destructive' : 'border-border'
                 }`}
               />
               {errors.business_description && (
@@ -212,6 +247,56 @@ export function VendorApply() {
                 placeholder="+254 7XX XXX XXX"
                 error={errors.phone}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <MapPin className="w-4 h-4 inline mr-1" />
+                City / Location *
+              </label>
+              <Input
+                type="text"
+                name="city"
+                value={formData.city}
+                onChange={handleInputChange}
+                placeholder="e.g. Nairobi, Mombasa, Kisumu"
+                error={errors.city}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <Tag className="w-4 h-4 inline mr-1" />
+                Main Product Categories *
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">Select all that apply</p>
+              <div className="flex flex-wrap gap-2">
+                {PRODUCT_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        main_categories: prev.main_categories.includes(cat)
+                          ? prev.main_categories.filter(c => c !== cat)
+                          : [...prev.main_categories, cat],
+                      }));
+                      setErrors(prev => ({ ...prev, main_categories: '' }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${
+                      formData.main_categories.includes(cat)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-muted-foreground/30 text-muted-foreground'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              {errors.main_categories && (
+                <p className="text-destructive text-sm mt-1">{errors.main_categories}</p>
+              )}
             </div>
 
             <Button

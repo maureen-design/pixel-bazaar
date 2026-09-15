@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Store, Package, ShoppingCart, DollarSign, ArrowRight, Check, X, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Users, Store, Package, DollarSign, ArrowRight, Check, X, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -8,13 +8,14 @@ import { Badge } from '../../components/ui/badge';
 import { Skeleton } from '../../components/ui/skeleton';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import { formatPrice } from '../../config/pricing';
 
 const statColorMap: Record<string, { bg: string; text: string }> = {
-  blue: { bg: 'bg-blue-500/20', text: 'text-blue-500' },
-  green: { bg: 'bg-green-500/20', text: 'text-green-500' },
-  purple: { bg: 'bg-purple-500/20', text: 'text-purple-500' },
-  yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
-  emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-500' },
+  blue: { bg: 'bg-primary/20', text: 'text-primary' },
+  green: { bg: 'bg-success/20', text: 'text-success' },
+  purple: { bg: 'bg-ai/20', text: 'text-ai' },
+  yellow: { bg: 'bg-warning/20', text: 'text-warning' },
+  emerald: { bg: 'bg-success/20', text: 'text-success' },
 };
 
 function formatPercent(current: number, previous: number) {
@@ -36,7 +37,7 @@ function StatCardSkeleton() {
 }
 
 export function AdminDashboard() {
-  const [stats, setStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0, pending_vendors: 0, low_stock: 0, out_of_stock: 0 });
+  const [stats, setStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0, pending_vendors: 0, low_stock: 0, out_of_stock: 0, status_breakdown: [] as { status: string; count: number }[] });
   const [prevStats, setPrevStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [pendingVendors, setPendingVendors] = useState<any[]>([]);
@@ -57,13 +58,20 @@ export function AdminDashboard() {
       const { data: products } = await supabase.from('products').select('id, stock_quantity, status, price');
 
       const [currentOrdersResult, prevOrdersResult] = await Promise.all([
-        supabase.from('orders').select('id, total_amount, created_at').gte('created_at', thirtyDaysAgo.toISOString()),
+        supabase.from('orders').select('id, total_amount, status, created_at').gte('created_at', thirtyDaysAgo.toISOString()),
         supabase.from('orders').select('id, total_amount, created_at').gte('created_at', sixtyDaysAgo.toISOString()).lt('created_at', thirtyDaysAgo.toISOString()),
       ]);
 
       const productList = products || [];
       const currentOrders = currentOrdersResult.data || [];
       const prevOrders = prevOrdersResult.data || [];
+
+      // Calculate status breakdown
+      const statusCounts: Record<string, number> = {};
+      currentOrders.forEach((o: any) => {
+        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+      });
+      const status_breakdown = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
 
       setStats({
         total_users: users?.length || 0,
@@ -74,6 +82,7 @@ export function AdminDashboard() {
         pending_vendors: vendors?.filter((v: any) => !v.is_verified).length || 0,
         low_stock: productList.filter((p: any) => p.stock_quantity > 0 && p.stock_quantity <= 5 && p.status !== 'out_of_stock').length,
         out_of_stock: productList.filter((p: any) => p.stock_quantity === 0 || p.status === 'out_of_stock').length,
+        status_breakdown,
       });
 
       setPrevStats({
@@ -108,6 +117,7 @@ export function AdminDashboard() {
     const { error } = await supabase.rpc('approve_vendor', { target_vendor_id: vendorId });
     if (error) { toast.error('Failed to approve vendor'); return; }
     toast.success('Vendor approved');
+    supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: vendorId, action: 'approved' } }).catch(() => {});
     fetchDashboard();
   };
 
@@ -115,10 +125,9 @@ export function AdminDashboard() {
     const { error } = await supabase.rpc('reject_vendor', { target_vendor_id: vendorId });
     if (error) { toast.error('Failed to reject vendor'); return; }
     toast.success('Vendor rejected');
+    supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: vendorId, action: 'rejected' } }).catch(() => {});
     fetchDashboard();
   };
-
-  const formatPrice = (p: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(p);
 
   const getStatusColor = (s: string) => {
     const map: Record<string, string> = { pending: 'bg-warning/20 text-warning', processing: 'bg-primary/20 text-primary', shipped: 'bg-ai/20 text-ai', delivered: 'bg-success/20 text-success', cancelled: 'bg-destructive/20 text-destructive' };
@@ -150,7 +159,7 @@ export function AdminDashboard() {
     { icon: Users, label: 'Total Users', value: stats.total_users, color: 'blue', delay: 0.1, prev: prevStats.total_users },
     { icon: Store, label: 'Total Vendors', value: stats.total_vendors, color: 'green', delay: 0.2, prev: prevStats.total_vendors },
     { icon: Package, label: 'Total Products', value: stats.total_products, color: 'purple', delay: 0.3, prev: prevStats.total_products },
-    { icon: ShoppingCart, label: '30-Day Orders', value: stats.total_orders, color: 'yellow', delay: 0.4, prev: prevStats.total_orders },
+    { icon: Package, label: '30-Day Orders', value: stats.total_orders, color: 'yellow', delay: 0.4, prev: prevStats.total_orders },
     { icon: DollarSign, label: '30-Day Revenue', value: formatPrice(stats.total_revenue), color: 'emerald', delay: 0.5, prev: prevStats.total_revenue },
   ];
 
@@ -188,9 +197,42 @@ export function AdminDashboard() {
         })}
       </div>
 
+      {/* Order Status Breakdown */}
+      {stats.status_breakdown.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+          <Card className="bg-card border-border p-6">
+            <h2 className="text-sm font-semibold text-muted-foreground mb-4">Order Status (30d)</h2>
+            <div className="flex items-center gap-3">
+              {[
+                { status: 'pending', label: 'Pending', color: 'bg-warning' },
+                { status: 'processing', label: 'Processing', color: 'bg-primary' },
+                { status: 'shipped', label: 'Shipped', color: 'bg-ai' },
+                { status: 'delivered', label: 'Delivered', color: 'bg-success' },
+                { status: 'cancelled', label: 'Cancelled', color: 'bg-destructive' },
+              ].map(({ status, label, color }) => {
+                const count = stats.status_breakdown.find(s => s.status === status)?.count || 0;
+                const pct = stats.total_orders > 0 ? (count / stats.total_orders) * 100 : 0;
+                return (
+                  <div key={status} className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className={`w-2 h-2 rounded-full ${color}`} />
+                      <span className="text-xs text-muted-foreground truncate">{label}</span>
+                    </div>
+                    <p className="text-lg font-bold">{count}</p>
+                    <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link to="/admin/inventory">
-          <Card className="p-4 bg-card border-border hover:border-yellow-500/50 transition-colors cursor-pointer">
+          <Card className="p-4 bg-card border-border hover:border-warning/50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-8 h-8 text-warning" />
               <div>
@@ -202,7 +244,7 @@ export function AdminDashboard() {
           </Card>
         </Link>
         <Link to="/admin/inventory?filter=out_of_stock">
-          <Card className="p-4 bg-card border-border hover:border-red-500/50 transition-colors cursor-pointer">
+          <Card className="p-4 bg-card border-border hover:border-destructive/50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-8 h-8 text-destructive" />
               <div>

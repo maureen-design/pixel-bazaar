@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles, X } from 'lucide-react';
+import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles, X, ChevronDown, Package, LayoutDashboard, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -25,15 +25,26 @@ import {
 } from './ui/sheet';
 import { Separator } from './ui/separator';
 import { useSettings } from '../hooks/useSettings';
+import { useCategories } from '../hooks/useCategories';
+import { formatPrice } from '../config/pricing';
+import { supabase } from '../lib/supabaseClient';
+
+const HEADER_CATEGORY_LIMIT = 6;
 
 export function Navbar() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [isAIOpen, setIsAIOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [desktopQuery, setDesktopQuery] = useState('');
+  const [desktopAiMode, setDesktopAiMode] = useState(false);
+  const [desktopLoading, setDesktopLoading] = useState(false);
+  const desktopInputRef = useRef<HTMLInputElement>(null);
   const { user, signOut, isVendor, isAdmin } = useAuth();
   const { cartItems, cartCount, cartTotal, removeFromCart } = useCart();
   const { wishlistCount } = useWishlist();
   const { settings } = useSettings();
+  const { categories } = useCategories();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -64,50 +75,124 @@ export function Navbar() {
     navigate('/login');
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-    }).format(price);
+  const handleDesktopSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = desktopQuery.trim();
+    if (!trimmed) return;
+
+    if (desktopAiMode) {
+      setDesktopLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-assistant', {
+          body: { action: 'parse_search', data: { query: trimmed } },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'AI search failed');
+
+        const filters = data.data;
+        const params = new URLSearchParams();
+        if (filters.keywords) params.set('q', filters.keywords);
+        if (filters.category) params.set('category', filters.category);
+        if (filters.productType) params.set('type', filters.productType);
+        if (filters.brand) params.set('brand', filters.brand);
+        if (filters.color) params.set('color', filters.color);
+        if (filters.minPrice) params.set('minPrice', String(filters.minPrice));
+        if (filters.maxPrice) params.set('maxPrice', String(filters.maxPrice));
+        if (filters.sortBy) params.set('sort', filters.sortBy);
+
+        navigate(params.size > 0 ? `/search?${params.toString()}` : `/search?q=${encodeURIComponent(trimmed)}`);
+      } catch {
+        navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+      } finally {
+        setDesktopLoading(false);
+      }
+    } else {
+      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+    }
   };
+
+  const headerCategories = categories.slice(0, HEADER_CATEGORY_LIMIT);
+  const moreCategories = categories.slice(HEADER_CATEGORY_LIMIT);
 
   return (
     <nav className="glass sticky top-0 z-50">
+      {/* Main header row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
-            <Monogram />
-            <span className="text-xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
+          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Monogram className="w-9 h-9" />
+            <span className="text-xl font-bold text-foreground">
               {settings.siteName}
             </span>
           </Link>
 
-          {/* Search Bar - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-lg mx-8">
-            <AISearchBar />
-          </div>
+          {/* Desktop Search Bar */}
+          <form onSubmit={handleDesktopSearch} className="hidden md:flex items-center flex-1 max-w-md mx-6">
+            <div className="relative w-full">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {desktopLoading ? (
+                  <Loader2 aria-hidden="true" className="w-4 h-4 text-muted-foreground animate-spin" />
+                ) : (
+                  <Search aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+              <input
+                ref={desktopInputRef}
+                type="text"
+                placeholder={desktopAiMode ? 'Ask AI to find what you need...' : 'Search products...'}
+                value={desktopQuery}
+                onChange={(e) => setDesktopQuery(e.target.value)}
+                className={`w-full pl-9 pr-16 py-2 bg-muted border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all ${
+                  desktopAiMode ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border'
+                }`}
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <button
+                  type="button"
+                  onClick={() => { setDesktopAiMode(!desktopAiMode); setDesktopQuery(''); desktopInputRef.current?.focus(); }}
+                  aria-pressed={desktopAiMode}
+                  aria-label={desktopAiMode ? 'Switch to regular search' : 'Switch to AI search'}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
+                    desktopAiMode
+                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                      : 'bg-muted-foreground/20 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  AI
+                </button>
+              </div>
+            </div>
+          </form>
 
           {/* Right Actions */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
             {/* Wishlist */}
             <Link
               to="/wishlist"
               aria-label={`Wishlist, ${wishlistCount} item${wishlistCount === 1 ? '' : 's'}`}
               className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Heart aria-hidden="true" className="w-6 h-6" />
+              <Heart aria-hidden="true" className="w-5 h-5" />
               {wishlistCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 bg-destructive text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-medium">
                   {wishlistCount}
                 </span>
               )}
             </Link>
 
-            {/* AI Assistant */}
+            {/* Ask AI */}
             <button
               onClick={() => setIsAIOpen(true)}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-ai/15 text-ai hover:bg-ai/25 rounded-full text-sm font-medium transition-colors"
+            >
+              <Sparkles aria-hidden="true" className="w-3.5 h-3.5" />
+              Ask AI
+            </button>
+            <button
+              onClick={() => setIsAIOpen(true)}
+              className="sm:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Open AI shopping assistant"
             >
               <Sparkles aria-hidden="true" className="w-5 h-5" />
@@ -122,7 +207,7 @@ export function Navbar() {
               {isDark ? <Sun aria-hidden="true" className="w-5 h-5" /> : <Moon aria-hidden="true" className="w-5 h-5" />}
             </button>
 
-            {/* Cart - Sheet Trigger */}
+            {/* Cart */}
             <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
               <SheetTrigger
                 render={
@@ -130,9 +215,9 @@ export function Navbar() {
                     aria-label={`Shopping cart with ${cartCount} item${cartCount === 1 ? '' : 's'}`}
                     className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <ShoppingCart aria-hidden="true" className="w-6 h-6" />
+                    <ShoppingCart aria-hidden="true" className="w-5 h-5" />
                     {cartCount > 0 && (
-                      <span key={cartCount} className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center animate-bounce">
+                      <span key={cartCount} className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-medium animate-bounce">
                         {cartCount}
                       </span>
                     )}
@@ -231,17 +316,17 @@ export function Navbar() {
               </SheetContent>
             </Sheet>
 
-            {/* User Menu - DropdownMenu */}
+            {/* User Menu */}
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <button
                       aria-label="Open user menu"
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
+                      className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors"
                     >
                       <div className="w-8 h-8 bg-gradient-to-br from-brand to-brand-dark rounded-full flex items-center justify-center">
-                        <User aria-hidden="true" className="w-5 h-5 text-white" />
+                        <User aria-hidden="true" className="w-4 h-4 text-white" />
                       </div>
                     </button>
                   }
@@ -261,7 +346,7 @@ export function Navbar() {
                     Profile
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/orders')}>
-                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    <Package className="w-4 h-4 mr-2" />
                     My Orders
                   </DropdownMenuItem>
                   {isAdmin && (
@@ -272,7 +357,7 @@ export function Navbar() {
                   )}
                   {isVendor && (
                     <DropdownMenuItem onClick={() => navigate('/vendor/dashboard')}>
-                      <Settings className="w-4 h-4 mr-2" />
+                      <LayoutDashboard className="w-4 h-4 mr-2" />
                       Vendor Dashboard
                     </DropdownMenuItem>
                   )}
@@ -291,14 +376,14 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <Link
                   to="/login"
-                  className="flex items-center gap-2 px-4 py-2 hover:bg-muted rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-muted rounded-lg transition-colors text-sm"
                 >
                   <User className="w-4 h-4" />
-                  Sign In
+                  <span className="hidden sm:inline">Sign In</span>
                 </Link>
                 <Link
                   to="/signup"
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg transition-colors text-sm font-medium"
                 >
                   Sign Up
                 </Link>
@@ -306,12 +391,87 @@ export function Navbar() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Search Bar - Mobile */}
-        <div className="md:hidden pb-4">
+      {/* Category Navigation Bar */}
+      <div className="border-t border-border/50 hidden md:block">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-10">
+            {/* Scrollable category links */}
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-1">
+              {headerCategories.map((category) => (
+                <Link
+                  key={category.id}
+                  to={`/search?category=${category.id}`}
+                  className="flex-shrink-0 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
+                >
+                  {category.name}
+                </Link>
+              ))}
+            </div>
+            {/* More dropdown — outside overflow container */}
+            {moreCategories.length > 0 && (
+              <div
+                className="relative flex-shrink-0 ml-1"
+                ref={(el) => {
+                  if (el) {
+                    el.onblur = (e) => {
+                      if (!el.contains(e.relatedTarget as Node)) {
+                        setTimeout(() => setIsMoreOpen(false), 150);
+                      }
+                    };
+                  }
+                }}
+              >
+                <button
+                  aria-expanded={isMoreOpen}
+                  aria-haspopup="menu"
+                  tabIndex={0}
+                  onClick={() => setIsMoreOpen((prev) => !prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsMoreOpen((prev) => !prev);
+                    }
+                    if (e.key === 'Escape') setIsMoreOpen(false);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
+                >
+                  More
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {isMoreOpen && (
+                  <div
+                    role="menu"
+                    className="absolute top-full right-0 mt-0 pt-1 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+                  >
+                    {moreCategories.map((category) => (
+                      <Link
+                        key={category.id}
+                        role="menuitem"
+                        to={`/search?category=${category.id}`}
+                        onClick={() => setIsMoreOpen(false)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="block px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        {category.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Search Bar Section */}
+      <div className="border-t border-border/50 md:hidden">
+        <div className="max-w-7xl mx-auto px-4 py-3">
           <AISearchBar />
         </div>
       </div>
+
       <ShoppingAssistantModal open={isAIOpen} onOpenChange={setIsAIOpen} />
     </nav>
   );

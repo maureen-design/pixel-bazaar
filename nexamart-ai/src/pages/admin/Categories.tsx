@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, FolderOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, FolderOpen, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Pagination } from '../../components/ui/pagination';
@@ -24,6 +24,7 @@ export function AdminCategories() {
   const [form, setForm] = useState({ name: '', slug: '', icon: '', description: '' });
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchCategories(); }, []);
 
@@ -36,8 +37,9 @@ export function AdminCategories() {
       const counts: Record<string, number> = {};
       (products || []).forEach((p: any) => { counts[p.category_id] = (counts[p.category_id] || 0) + 1; });
       setProductCounts(counts);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -130,35 +132,47 @@ export function AdminCategories() {
         />
       </div>
 
-      <Card className="bg-card border-border overflow-hidden">
-        {loading ? (
-          <div className="p-4 space-y-0">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-4 border-b border-border last:border-b-0">
-                <Skeleton className="h-9 w-9 rounded-lg" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-24 ml-auto" />
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-16 ml-auto" />
-                <div className="flex gap-1 ml-2">
-                  <Skeleton className="h-8 w-8 rounded" />
-                  <Skeleton className="h-8 w-8 rounded" />
+      {error && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (
+        <Card className="bg-card border-border overflow-hidden">
+          {loading ? (
+            <div className="p-4 space-y-0">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-4 border-b border-border last:border-b-0">
+                  <Skeleton className="h-9 w-9 rounded-lg" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24 ml-auto" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16 ml-auto" />
+                  <div className="flex gap-1 ml-2">
+                    <Skeleton className="h-8 w-8 rounded" />
+                    <Skeleton className="h-8 w-8 rounded" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
-            <p className="text-sm font-medium">{search ? 'No categories match your search' : 'No categories yet'}</p>
-            {!search && (
-              <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={openCreate}>
-                <Plus className="w-4 h-4" /> Create your first category
-              </Button>
-            )}
-          </div>
-        ) : (
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
+              <p className="text-sm font-medium">{search ? 'No categories match your search' : 'No categories yet'}</p>
+              {!search && (
+                <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={openCreate}>
+                  <Plus className="w-4 h-4" /> Create your first category
+                </Button>
+              )}
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -189,7 +203,7 @@ export function AdminCategories() {
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(cat)} aria-label={`Edit ${cat.name}`}><Edit2 aria-hidden="true" className="w-4 h-4" /></Button>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-red-300 hover:bg-destructive/10" onClick={() => setDeleteTarget(cat)} aria-label={`Delete ${cat.name}`}>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(cat)} aria-label={`Delete ${cat.name}`}>
                           <Trash2 aria-hidden="true" className="w-4 h-4" />
                         </Button>
                       </div>
@@ -201,6 +215,7 @@ export function AdminCategories() {
           </div>
         )}
       </Card>
+      )}
 
       {!loading && filtered.length > 0 && (
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
