@@ -56,6 +56,12 @@ export function Navbar() {
       document.documentElement.classList.add('dark');
       setIsDark(true);
     }
+    if (localStorage.getItem('high-contrast') === 'true') {
+      document.documentElement.classList.add('high-contrast');
+    }
+    if (localStorage.getItem('text-scale-large') === 'true') {
+      document.documentElement.classList.add('text-scale-large');
+    }
   }, []);
 
   const toggleTheme = () => {

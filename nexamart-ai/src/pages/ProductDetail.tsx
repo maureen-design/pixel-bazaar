@@ -284,7 +284,7 @@ export function ProductDetail() {
             <h1 className="text-3xl font-bold mb-4">{product.name}</h1>
             
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1" aria-label={`${product.rating} out of 5 stars`} role="img">
                 {renderStars(product.rating)}
               </div>
               <span className="text-muted-foreground">({product.rating} rating)</span>
@@ -492,6 +492,7 @@ export function ProductDetail() {
                       key={star}
                       type="button"
                       onClick={() => setReviewRating(star)}
+                      aria-label={`Rate ${star} out of 5 stars`}
                       className="focus:outline-none"
                     >
                       <Star
@@ -561,9 +562,9 @@ export function ProductDetail() {
                         <p className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1" aria-label={`${r.rating} out of 5 stars`}>
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <Star key={star} className={`w-4 h-4 ${star <= r.rating ? 'fill-warning text-warning' : 'text-muted-foreground'}`} />
+                        <Star key={star} className={`w-4 h-4 ${star <= r.rating ? 'fill-warning text-warning' : 'text-muted-foreground'}`} aria-hidden="true" />
                       ))}
                     </div>
                   </div>

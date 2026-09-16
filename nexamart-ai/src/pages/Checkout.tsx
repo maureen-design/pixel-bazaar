@@ -601,7 +601,7 @@ export function Checkout() {
                 <div className="bg-card rounded-xl p-6 border border-border">
                   <h2 className="text-xl font-semibold mb-6">Shipping Address</h2>
                   <div className="space-y-4">
-                    <Input label="Full Name *" type="text" name="full_name" value={formData.full_name} onChange={handleInputChange} placeholder="John Doe" error={errors.full_name} />
+                    <Input label="Full Name *" type="text" name="full_name" value={formData.full_name} onChange={handleInputChange} placeholder="Enter your full name" error={errors.full_name} />
                     <Input label="Phone Number *" type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+254 7XX XXX XXX" error={errors.phone} />
                     <Input label="Address *" type="text" name="address" value={formData.address} onChange={handleInputChange} placeholder="Street address, apartment, etc." error={errors.address} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

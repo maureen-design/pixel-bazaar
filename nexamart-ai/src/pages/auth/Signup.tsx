@@ -102,7 +102,7 @@ export function Signup() {
         <Input
           label="Full Name"
           type="text"
-          placeholder="John Doe"
+          placeholder="Enter your full name"
           value={fullName}
           onChange={(e) => { setFullName(e.target.value); clearFieldError('fullName'); }}
           autoComplete="name"

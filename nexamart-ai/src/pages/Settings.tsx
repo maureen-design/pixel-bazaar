@@ -10,7 +10,7 @@ import { Separator } from '../components/ui/separator';
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
-import { Sun, Moon, Bell, UserCircle } from 'lucide-react';
+import { Sun, Moon, Bell, UserCircle, Eye, Type } from 'lucide-react';
 
 export function Settings() {
   const { user, profile } = useAuth();
@@ -22,6 +22,8 @@ export function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPw, setChangingPw] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [isHighContrast, setIsHighContrast] = useState(false);
+  const [isLargeText, setIsLargeText] = useState(false);
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -35,6 +37,8 @@ export function Settings() {
     }
     const savedTheme = localStorage.getItem('theme');
     setIsDark(savedTheme !== 'light');
+    setIsHighContrast(document.documentElement.classList.contains('high-contrast'));
+    setIsLargeText(document.documentElement.classList.contains('text-scale-large'));
   }, [profile]);
 
   const handleProfileUpdate = async () => {
@@ -103,6 +107,32 @@ export function Settings() {
       html.classList.add('dark');
       localStorage.setItem('theme', 'dark');
       setIsDark(true);
+    }
+  };
+
+  const toggleHighContrast = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('high-contrast')) {
+      html.classList.remove('high-contrast');
+      localStorage.removeItem('high-contrast');
+      setIsHighContrast(false);
+    } else {
+      html.classList.add('high-contrast');
+      localStorage.setItem('high-contrast', 'true');
+      setIsHighContrast(true);
+    }
+  };
+
+  const toggleLargeText = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('text-scale-large')) {
+      html.classList.remove('text-scale-large');
+      localStorage.removeItem('text-scale-large');
+      setIsLargeText(false);
+    } else {
+      html.classList.add('text-scale-large');
+      localStorage.setItem('text-scale-large', 'true');
+      setIsLargeText(true);
     }
   };
 
@@ -259,7 +289,7 @@ export function Settings() {
                 Theme Preference
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm">Dark Mode</span>
                 <button
@@ -278,8 +308,52 @@ export function Settings() {
                   />
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  High Contrast
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={isHighContrast}
+                  aria-label="Toggle high contrast mode"
+                  onClick={toggleHighContrast}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    isHighContrast ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      isHighContrast ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm flex items-center gap-2">
+                  <Type className="w-4 h-4" />
+                  Large Text
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={isLargeText}
+                  aria-label="Toggle large text mode"
+                  onClick={toggleLargeText}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    isLargeText ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      isLargeText ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
                 Current: {isDark ? 'Dark' : 'Light'} mode
+                {isHighContrast ? ' · High contrast' : ''}
+                {isLargeText ? ' · Large text' : ''}
               </p>
             </CardContent>
           </Card>
