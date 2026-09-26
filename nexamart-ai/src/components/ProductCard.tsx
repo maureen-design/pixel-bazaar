@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Star, StarHalf, ShoppingCart } from 'lucide-react';
+import { Star, StarHalf, ShoppingCart, Store } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Product } from '../types';
 import { AddToCartButton } from './AddToCartButton';
@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { SafeImg } from './SafeImg';
 import { countryFlag } from '../utils/flags';
 import { formatPrice } from '../config/pricing';
+import { getAvailableStock, getCardStockState } from '../lib/stock';
 
 interface ProductCardProps {
   product: Product;
@@ -49,11 +50,10 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const hasVariants = !!product.variants && !!product.variants.options && product.variants.options.length > 0;
   const variantCount = hasVariants && product.variants?.combinations ? product.variants.combinations.length : 0;
-  const isOutOfStock =
-    product.status === 'out_of_stock' ||
-    (hasVariants
-      ? !product.variants?.combinations?.some((c) => (c.stock || 0) > 0)
-      : product.stock_quantity === 0);
+  const totalStock = getAvailableStock(product.variants, product.stock_quantity);
+  const stockState = getCardStockState(product);
+  const isOutOfStock = stockState === 'out_of_stock';
+  const isLowStock = stockState === 'low';
 
   const discountPercent =
     product.compare_price && product.compare_price > product.price
@@ -109,14 +109,15 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.name}
           </h3>
           
-          <p className="text-muted-foreground text-sm mb-2">
+          <p className="inline-flex items-center gap-1.5 text-sm mb-2 bg-muted/60 border border-border rounded-full px-2.5 py-1">
+            <Store className="w-3.5 h-3.5 text-muted-foreground" />
             {countryFlag(product.vendor?.country) && (
-              <span className="mr-1" role="img" aria-label={product.vendor?.country ?? undefined}>
+              <span role="img" aria-label={product.vendor?.country ?? undefined}>
                 {countryFlag(product.vendor?.country)}
               </span>
             )}
-            {product.vendor?.store_name}
-            <span className="text-muted-foreground/60 ml-2">{timeAgo(product.created_at)}</span>
+            <span className="font-medium text-foreground">{product.vendor?.store_name || 'NexaMart'}</span>
+            <span className="text-muted-foreground/60">· {timeAgo(product.created_at)}</span>
           </p>
           
           <div className="flex items-center gap-1 mb-3">
@@ -136,7 +137,16 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </div>
           </div>
-          
+
+          {isOutOfStock ? (
+            <p className="text-sm font-medium text-muted-foreground mb-3">
+              Out of stock
+              <span className="font-normal"> — check back later or view similar items</span>
+            </p>
+          ) : isLowStock && totalStock !== null ? (
+            <p className="text-sm font-medium text-warning mb-3">Only {totalStock} left</p>
+          ) : null}
+
           <div className="transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100">
             {hasVariants ? (
               <Button
@@ -149,7 +159,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 }}
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
-                Select Options
+                {isOutOfStock ? 'Out of Stock' : 'Select Options'}
               </Button>
             ) : (
               <AddToCartButton

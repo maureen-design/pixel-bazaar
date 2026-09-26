@@ -85,7 +85,7 @@ export function OrderTimeline({ status, paymentStatus }: OrderTimelineProps) {
   );
 }
 
-export function OrderCancelledNotice() {
+export function OrderCancelledNotice({ stockReleased = false }: { stockReleased?: boolean }) {
   return (
     <div
       className="rounded-xl p-4 mb-6 bg-destructive/5 border border-destructive/20 flex items-start gap-3"
@@ -95,7 +95,9 @@ export function OrderCancelledNotice() {
       <div>
         <p className="font-medium text-destructive">Order cancelled or payment failed</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Reserved stock has been released back to the vendor. You can safely place a new order.
+          {stockReleased
+            ? 'Reserved stock has been released back to the vendor. You can safely place a new order.'
+            : 'This order was cancelled. If you were charged, a refund is handled separately by support.'}
         </p>
       </div>
     </div>

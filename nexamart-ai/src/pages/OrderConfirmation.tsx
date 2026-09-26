@@ -44,6 +44,7 @@ interface Order {
   mpesa_transaction_id?: string;
   mpesa_checkout_id?: string;
   paid_at?: string;
+  stock_released?: boolean;
   items: OrderItem[];
 }
 
@@ -306,7 +307,7 @@ export function OrderConfirmation() {
 
         {/* Order progress timeline / cancelled notice */}
         {order.status === 'cancelled' || order.payment_status === 'failed' ? (
-          <OrderCancelledNotice />
+          <OrderCancelledNotice stockReleased={order.stock_released === true} />
         ) : (
           <OrderTimeline status={order.status} paymentStatus={order.payment_status || 'pending'} />
         )}

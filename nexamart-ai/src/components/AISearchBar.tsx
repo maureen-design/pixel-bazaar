@@ -77,7 +77,7 @@ export function AISearchBar() {
 
         navigate(`/search?${params.toString()}`);
       } catch (err: any) {
-        toast.error('AI search unavailable, using regular search');
+        toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
         navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       } finally {
         setLoading(false);
@@ -97,7 +97,7 @@ export function AISearchBar() {
         body: { action: 'parse_search', data: { query: example } },
       }).then(({ data, error }) => {
         if (error || !data?.success) {
-          toast.error('AI search unavailable, using regular search');
+          toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
           navigate(`/search?q=${encodeURIComponent(example)}`);
           return;
         }
@@ -139,6 +139,7 @@ export function AISearchBar() {
         }
         navigate(`/search?${params.toString()}`);
       }).catch(() => {
+        toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
         navigate(`/search?q=${encodeURIComponent(example)}`);
       }).finally(() => {
         setLoading(false);

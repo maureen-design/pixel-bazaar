@@ -5,6 +5,7 @@ import { useCart } from '../../context/CartContext';
 import { SafeImg } from '../SafeImg';
 import type { ProductVariants } from '../../types';
 import { formatPrice } from '../../config/pricing';
+import { getAvailableStock, getStockState } from '../../lib/stock';
 
 export interface Recommendation {
   product_id: string;
@@ -34,10 +35,10 @@ export function ProductRecommendationCard({ recommendation, index }: ProductReco
 
   const product = recommendation.product;
 
-  const hasVariants = !!product.variants?.options?.length;
-  const isOutOfStock = hasVariants
-    ? !product.variants!.combinations?.some((c) => (c.stock || 0) > 0)
-    : product.stock_quantity === 0;
+  const totalStock = getAvailableStock(product.variants, product.stock_quantity);
+  const stockState = getStockState(totalStock);
+  const isOutOfStock = stockState === 'out_of_stock';
+  const isLowStock = stockState === 'low';
 
   const handleAddToCart = async () => {
     await addToCart(product.id, 1, undefined, undefined, undefined, product);
@@ -72,6 +73,11 @@ export function ProductRecommendationCard({ recommendation, index }: ProductReco
           {product.rating > 0 && (
             <p className="text-xs text-muted-foreground">Rating: {product.rating} / 5</p>
           )}
+          {isOutOfStock ? (
+            <p className="text-xs font-medium text-muted-foreground mt-1">Out of stock</p>
+          ) : isLowStock && totalStock !== null ? (
+            <p className="text-xs font-medium text-warning mt-1">Only {totalStock} left</p>
+          ) : null}
         </div>
       </div>
 
@@ -101,7 +107,7 @@ export function ProductRecommendationCard({ recommendation, index }: ProductReco
         </Button>
         <Button size="sm" onClick={handleAddToCart} className="flex-1" disabled={isOutOfStock}>
           <ShoppingCart className="w-4 h-4 mr-1" />
-          Add to Cart
+          {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
         </Button>
       </div>
     </div>

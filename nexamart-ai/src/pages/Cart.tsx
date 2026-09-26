@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, ShoppingCart, ArrowRight, Truck } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingCart, ArrowRight, Truck, AlertTriangle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -7,18 +7,27 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { getDeliveryBaseCost } from '../lib/settings';
 import { useSettings } from '../hooks/useSettings';
+import { useCartStockValidation } from '../hooks/useCartStockValidation';
 import { formatPrice } from '../config/pricing';
 
 export function Cart() {
   const { cartItems, cartTotal, removeFromCart, updateQuantity, loading } = useCart();
   const { user } = useAuth();
   const { settings } = useSettings();
+  const { report: stockReport, checking: checkingStock } = useCartStockValidation(cartItems);
+
+  const issueForItem = (itemId: string) => stockReport.issues.find((issue) => issue.cartItemId === itemId);
+  const noticeForItem = (itemId: string) => stockReport.notices.find((notice) => notice.cartItemId === itemId);
 
   const itemPrice = (item: (typeof cartItems)[number]) => {
     return item.variant_price ?? item.products?.price ?? 0;
   };
 
+  // Live stock caps the increment control. The local snapshot is only a
+  // placeholder until the live lookup answers.
   const getCartItemStock = (item: (typeof cartItems)[number]): number => {
+    const live = stockReport.availableByCartItem[item.id];
+    if (typeof live === 'number') return live;
     if (item.variant_id) {
       const combinations = item.products?.variants?.combinations;
       const combo = combinations?.find((c) => c.id === item.variant_id);
@@ -26,6 +35,8 @@ export function Cart() {
     }
     return Math.max(0, item.products?.stock_quantity || 0);
   };
+
+  const blockingIssues = stockReport.issues;
 
   const formatVariantAttributes = (attributes?: Record<string, string>) => {
     if (!attributes) return '';
@@ -95,6 +106,25 @@ export function Cart() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Cart Items */}
             <div className="lg:col-span-2 space-y-4">
+              {blockingIssues.length > 0 && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-destructive/40 bg-destructive/10 p-4"
+                >
+                  <h2 className="flex items-center gap-2 font-semibold text-destructive">
+                    <AlertTriangle aria-hidden="true" className="h-5 w-5" />
+                    {blockingIssues.length === 1
+                      ? '1 item needs your attention'
+                      : `${blockingIssues.length} items need your attention`}
+                  </h2>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-destructive">
+                    {blockingIssues.map((issue) => (
+                      <li key={issue.cartItemId}>{issue.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {cartItems.map((item) => (
                 <div
                   key={item.id}
@@ -160,6 +190,33 @@ export function Cart() {
                           {formatPrice(itemPrice(item) * item.quantity)}
                         </p>
                       </div>
+
+                      {issueForItem(item.id) ? (
+                        <div
+                          role="status"
+                          className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2"
+                        >
+                          <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-destructive" />
+                          <p className="text-sm text-destructive">
+                            {issueForItem(item.id)!.message}
+                          </p>
+                          {issueForItem(item.id)!.kind === 'insufficient' && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateQuantity(item.id, issueForItem(item.id)!.available)
+                              }
+                              className="text-sm font-medium text-destructive underline underline-offset-2 hover:opacity-80"
+                            >
+                              Reduce to {issueForItem(item.id)!.available}
+                            </button>
+                          )}
+                        </div>
+                      ) : noticeForItem(item.id) ? (
+                        <p role="status" className="mt-3 text-sm text-amber-600 dark:text-amber-500">
+                          {noticeForItem(item.id)!.message}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -216,12 +273,26 @@ export function Cart() {
                   </div>
                 </div>
 
-                <Link to="/checkout" className="block">
-                  <Button className="w-full py-4 text-lg">
-                    {user ? 'Proceed to Checkout' : 'Sign In to Checkout'}
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
-                </Link>
+                {blockingIssues.length > 0 ? (
+                  <>
+                    <Button className="w-full py-4 text-lg" disabled>
+                      Proceed to Checkout
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+                    <p className="text-xs text-destructive text-center mt-3">
+                      {checkingStock
+                        ? 'Checking current stock…'
+                        : 'Update or remove the flagged items to continue.'}
+                    </p>
+                  </>
+                ) : (
+                  <Link to="/checkout" className="block">
+                    <Button className="w-full py-4 text-lg">
+                      {user ? 'Proceed to Checkout' : 'Sign In to Checkout'}
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+                  </Link>
+                )}
 
                 {!user && (
                   <p className="text-xs text-muted-foreground text-center mt-3">

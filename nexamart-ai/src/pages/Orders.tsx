@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Package, ChevronDown, ChevronUp, ExternalLink, Clock, Building2 } from 'lucide-react';
+import { Package, ChevronDown, ChevronUp, ExternalLink, Clock, Building2, Truck, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { Navbar } from '../components/Navbar';
@@ -97,18 +97,41 @@ export function Orders() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
-        return 'bg-warning/20 text-warning';
+        return 'bg-warning/20 text-warning border-warning/30';
       case 'processing':
-        return 'bg-primary/20 text-primary';
+        return 'bg-primary/20 text-primary border-primary/30';
       case 'shipped':
-        return 'bg-accent/20 text-accent-foreground';
+        return 'bg-accent/20 text-accent-foreground border-accent/30';
       case 'delivered':
-        return 'bg-success/20 text-success';
+        return 'bg-success/20 text-success border-success/30';
       case 'cancelled':
-        return 'bg-destructive/20 text-destructive';
+        return 'bg-destructive/20 text-destructive border-destructive/30';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-muted text-muted-foreground border-border';
     }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return Clock;
+      case 'processing': return Package;
+      case 'shipped': return Truck;
+      case 'delivered': return CheckCircle2;
+      case 'cancelled': return XCircle;
+      default: return Package;
+    }
+  };
+
+  const getStatusHelp = (order: Order) => {
+    if (order.status === 'cancelled') return 'Order cancelled — no further action.';
+    if (order.payment_status === 'failed') return 'Payment failed — try Pay Now or contact support.';
+    if (order.payment_status !== 'paid' && order.payment_method === 'bank') return 'Awaiting bank transfer verification.';
+    if (order.payment_status !== 'paid' && order.payment_type === 'later') return 'Unpaid — complete payment before deadline.';
+    if (order.status === 'pending' && order.payment_status === 'paid') return 'Payment confirmed — seller will process soon.';
+    if (order.status === 'processing') return 'Seller is preparing your order.';
+    if (order.status === 'shipped') return 'On the way — track with seller if provided.';
+    if (order.status === 'delivered') return 'Delivered — please confirm receipt.';
+    return '';
   };
 
   if (loading) {
@@ -170,22 +193,28 @@ export function Orders() {
                       }}
                     >
                       <div className="flex-1">
-                        <div className="flex items-center gap-4 mb-2">
+                        {(() => { const StatusIcon = getStatusIcon(order.status); const help = getStatusHelp(order); return (
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
                           <h3 className="font-semibold">#{order.order_number}</h3>
-                          <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
-                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          <span className={`text-xs px-2.5 py-1 rounded-full border flex items-center gap-1 ${getStatusColor(order.status)}`}>
+                            <StatusIcon className="w-3 h-3" /> {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </span>
+                          <span className={`text-xs px-2.5 py-1 rounded-full border ${order.payment_status === 'paid' ? 'bg-success/15 text-success border-success/30' : order.payment_status === 'failed' ? 'bg-destructive/15 text-destructive border-destructive/30' : 'bg-warning/15 text-warning border-warning/30'}`}>
+                            Payment: {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
                           </span>
                           {order.payment_type === 'later' && order.payment_status !== 'paid' && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-warning/20 text-warning flex items-center gap-1">
+                            <span className="text-xs px-2 py-1 rounded-full bg-warning/20 text-warning flex items-center gap-1 border border-warning/30">
                               <Clock className="w-3 h-3" /> Unpaid
                             </span>
                           )}
                           {order.payment_method === 'bank' && order.payment_status !== 'paid' && order.status !== 'cancelled' && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent flex items-center gap-1">
+                            <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent-foreground flex items-center gap-1 border border-accent/30">
                               <Building2 className="w-3 h-3" /> Bank Transfer Pending
                             </span>
                           )}
+                          {help && <span className="text-xs text-muted-foreground hidden sm:inline">— {help}</span>}
                         </div>
+                        ); })()}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span>{formatOrderDate(order.created_at)}</span>
                           <span>•</span>
@@ -235,6 +264,12 @@ export function Orders() {
                           className="border-t border-border"
                         >
                           <div className="p-4 space-y-4">
+                            {/* Status Summary */}
+                            <div className="bg-muted/50 border border-border rounded-lg p-3 flex flex-wrap gap-4 text-sm">
+                              <span><span className="text-muted-foreground">Order:</span> <span className="font-medium capitalize">{order.status}</span></span>
+                              <span><span className="text-muted-foreground">Payment:</span> <span className={`font-medium ${order.payment_status === 'paid' ? 'text-success' : order.payment_status === 'failed' ? 'text-destructive' : 'text-warning'}`}>{order.payment_status}</span> via {order.payment_method}{order.payment_type === 'later' ? ' (Pay Later)' : ''}</span>
+                            </div>
+
                             {/* Order Items */}
                             <div>
                               <h4 className="font-medium mb-3">Order Items</h4>

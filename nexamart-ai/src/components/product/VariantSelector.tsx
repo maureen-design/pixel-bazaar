@@ -13,51 +13,65 @@ export function VariantSelector({ variants, selectedAttributes, onSelect }: Vari
     return null;
   }
 
+  const matchesSelection = (candidate: Record<string, string>, attributes: Record<string, string>) =>
+    Object.entries(attributes).every(([key, value]) => candidate[key] === value);
+
+  // An option value is offered only when some combination carrying the other
+  // selected attributes exists AND has stock, so customers are never shown a
+  // choice that cannot be bought.
   const isValueAvailable = (optionName: string, value: string) => {
-    const others = { ...selectedAttributes, [optionName]: value };
-    return variants.combinations.some((combination) => {
-      return Object.entries(others).every(([key, val]) => combination.attributes[key] === val);
-    });
+    const candidate = { ...selectedAttributes, [optionName]: value };
+    return variants.combinations.some(
+      (combination) => (combination.stock || 0) > 0 && matchesSelection(combination.attributes, candidate)
+    );
   };
 
-  const isComplete = variants.options.every(
-    (option) => selectedAttributes[option.name]
-  );
+  // Stock for the value under the current partial selection, used to hint
+  // urgency on low-stock options.
+  const getValueStock = (optionName: string, value: string) => {
+    const candidate = { ...selectedAttributes, [optionName]: value };
+    const matches = variants.combinations.filter(
+      (combination) => matchesSelection(combination.attributes, candidate)
+    );
+    if (matches.length === 0) return null;
+    return matches.reduce((total, combination) => total + (combination.stock || 0), 0);
+  };
 
   const handleSelect = (optionName: string, value: string) => {
     const next = { ...selectedAttributes, [optionName]: value };
-    if (isComplete) {
-      const hasCombination = variants.combinations.some((combination) =>
-        Object.entries(next).every(([key, val]) => combination.attributes[key] === val)
-      );
-      if (hasCombination) {
-        onSelect(next);
-      }
-    } else {
-      onSelect(next);
-    }
+    const hasStockedCombination = variants.combinations.some(
+      (combination) => (combination.stock || 0) > 0 && matchesSelection(combination.attributes, next)
+    );
+    if (!hasStockedCombination) return;
+    onSelect(next);
   };
 
   return (
     <div className="space-y-5 mb-6">
       {variants.options.map((option) => {
         const isColor = option.name.toLowerCase() === 'color';
+        const selectedValue = selectedAttributes[option.name];
+        const availableCount = option.values.filter((value) => isValueAvailable(option.name, value)).length;
         return (
           <div key={option.name}>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-secondary-foreground">
                 {option.label}:
               </span>
-              {selectedAttributes[option.name] && (
+              {selectedValue ? (
                 <span className="text-sm text-foreground font-medium">
-                  {selectedAttributes[option.name]}
+                  {selectedValue}
                 </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Select one</span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
               {option.values.map((value) => {
                 const available = isValueAvailable(option.name, value);
-                const selected = selectedAttributes[option.name] === value;
+                const selected = selectedValue === value;
+                const valueStock = available ? getValueStock(option.name, value) : null;
+                const isLowStock = valueStock !== null && valueStock > 0 && valueStock <= 5;
                 return isColor ? (
                   <ColorSwatch
                     key={value}
@@ -69,7 +83,7 @@ export function VariantSelector({ variants, selectedAttributes, onSelect }: Vari
                 ) : (
                   <SizePill
                     key={value}
-                    label={value}
+                    label={isLowStock ? `${value} · only ${valueStock} left` : value}
                     selected={selected}
                     disabled={!available}
                     onClick={() => handleSelect(option.name, value)}
@@ -77,6 +91,13 @@ export function VariantSelector({ variants, selectedAttributes, onSelect }: Vari
                 );
               })}
             </div>
+            {availableCount < option.values.length && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {availableCount === 0
+                  ? `All ${option.label.toLowerCase()} options are currently sold out.`
+                  : 'Greyed-out options are sold out for your current selection.'}
+              </p>
+            )}
           </div>
         );
       })}

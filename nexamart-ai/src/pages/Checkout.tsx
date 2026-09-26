@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Shield, ShoppingCart, RefreshCw } from 'lucide-react';
+import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Shield, ShoppingCart, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,9 @@ import { KENYA_COUNTIES, getTownsForCounty } from '../data/kenya-counties';
 import { formatPrice } from '../config/pricing';
 import { getShippingCostFor } from '../lib/settings';
 import { useSettings } from '../hooks/useSettings';
+import { useCartStockValidation } from '../hooks/useCartStockValidation';
+import { validateCartStock } from '../lib/cartStock';
+import type { CartStockReport } from '../lib/cartStock';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -48,6 +51,7 @@ export function Checkout() {
   const { user, profile } = useAuth();
   const { cartItems, cartTotal, clearCart } = useCart();
   const { settings, loading: settingsLoading } = useSettings();
+  const { report: stockReport } = useCartStockValidation(cartItems);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>('Shipping');
   const [selectedPayment, setSelectedPayment] = useState('mpesa');
@@ -67,6 +71,11 @@ export function Checkout() {
   });
 
   const [errors, setErrors] = useState<Partial<ShippingAddress>>({});
+  // A submit-time re-check is fresher than the mount-time report, so it wins
+  // while the user is still on this screen.
+  const [submitStockReport, setSubmitStockReport] = useState<CartStockReport | null>(null);
+  const stockIssues = (submitStockReport ?? stockReport).issues;
+  const stockNotices = (submitStockReport ?? stockReport).notices;
 
   const [orderCreated, setOrderCreated] = useState<any>(null);
   const [mpesaPhone, setMpesaPhone] = useState(profile?.phone || '');
@@ -213,6 +222,16 @@ export function Checkout() {
     const vendorIds = new Set(cartItems.map((item) => (item.products as { vendor_id?: string } | undefined)?.vendor_id).filter(Boolean));
     if (vendorIds.size > 1) {
       toast.error('Please checkout items from one vendor at a time.');
+      return;
+    }
+
+    // Re-check live stock at the last possible moment so the shopper is not
+    // pushed into a payment step for something that can no longer ship.
+    // create_order still re-validates and locks stock; this only warns sooner.
+    const stockCheck = await validateCartStock(cartItems);
+    if (stockCheck.checked && !stockCheck.ok) {
+      setSubmitStockReport(stockCheck);
+      toast.error(stockCheck.issues[0].message);
       return;
     }
 
@@ -675,9 +694,9 @@ export function Checkout() {
                   <h2 className="text-xl font-semibold mb-6">Payment Method</h2>
                   <div role="radiogroup" aria-label="Payment method" className="space-y-3">
                     {[
-                      { id: 'mpesa', icon: Smartphone, bg: 'bg-success', label: 'M-Pesa', desc: 'Pay via M-Pesa', enabled: settings.mpesaEnabled },
-                      { id: 'card', icon: CreditCard, bg: 'bg-primary', label: 'Credit/Debit Card', desc: 'Visa, Mastercard', enabled: settings.cardEnabled },
-                      { id: 'bank', icon: Building2, bg: 'bg-muted-foreground', label: 'Bank Transfer', desc: 'Direct bank transfer', enabled: settings.bankTransferEnabled },
+                      { id: 'mpesa', icon: Smartphone, bg: 'bg-success', label: 'M-Pesa', desc: 'STK Push to your phone — confirm on handset', enabled: settings.mpesaEnabled },
+                      { id: 'card', icon: CreditCard, bg: 'bg-primary', label: 'Credit/Debit Card', desc: 'Paystack secure checkout — Visa, Mastercard', enabled: settings.cardEnabled },
+                      { id: 'bank', icon: Building2, bg: 'bg-muted-foreground', label: 'Bank Transfer', desc: `Manual transfer — use order number as reference, ${settings.bankTransferDeadlineHours || 72}h deadline`, enabled: settings.bankTransferEnabled },
                     ].filter((p) => p.enabled).map(({ id, icon: Icon, bg, label, desc }) => (
                       <button key={id} type="button" role="radio" aria-checked={selectedPayment === id} aria-label={label} onClick={() => setSelectedPayment(id)}
                         className={`w-full flex items-center gap-4 p-4 rounded-lg border transition-all ${selectedPayment === id ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground'}`}>
@@ -695,24 +714,27 @@ export function Checkout() {
 
                   {selectedPayment === 'mpesa' && (
                     <div className="mt-4 p-3 bg-success/5 border border-success/20 rounded-lg">
+                      <p className="text-sm font-medium text-success mb-1">How M-Pesa works</p>
                       <p className="text-sm text-muted-foreground">
-                        After placing your order, you'll be prompted to enter your M-Pesa phone number to complete payment via STK Push.
+                        Tap Place Order → enter M-Pesa number → approve STK Push on your phone. Payment status is verified automatically. <span className="font-medium">Do not close this tab</span> until you see “Payment successful”.
                       </p>
                     </div>
                   )}
 
                   {selectedPayment === 'card' && (
-                    <div className="mt-4 p-4 rounded-lg bg-muted/50 border border-border">
+                    <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-sm font-medium text-primary mb-1">How card payment works</p>
                       <p className="text-sm text-muted-foreground">
-                        Pay securely using your credit or debit card. We accept Visa, Mastercard, and other major cards.
+                        Tap Place Order → you’ll be redirected to Paystack’s secure hosted checkout. Complete payment there and you’ll return here. Status: <span className="font-medium">Pending until Paystack confirms</span>.
                       </p>
                     </div>
                   )}
 
                   {selectedPayment === 'bank' && (
                     <div className="mt-4 p-3 bg-accent/5 border border-accent/20 rounded-lg">
+                      <p className="text-sm font-medium text-foreground mb-1">Bank transfer — manual verification</p>
                       <p className="text-sm text-muted-foreground">
-                        After placing your order, you'll receive bank transfer details and a unique reference number. Complete the transfer within {settings.bankTransferDeadlineHours || 72} hours to avoid cancellation.
+                        After Place Order you’ll see account details + your order number as reference. Transfer within <span className="font-medium">{settings.bankTransferDeadlineHours || 72} hours</span>. Status stays <span className="font-medium">Awaiting payment</span> until admin verifies — no auto-confirmation.
                       </p>
                     </div>
                   )}
@@ -753,10 +775,10 @@ export function Checkout() {
                     </button>
                   </div>
                   {paymentType === 'later' && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      {selectedPayment === 'bank'
-                        ? `Stock will be reserved for 24 hours. Complete the ${settings.bankTransferDeadlineHours || 72}-hour bank transfer before the deadline to avoid order cancellation.`
-                        : 'Stock will be reserved for 24 hours. Complete payment before the deadline to avoid order cancellation.'}
+                    <p className="text-xs text-muted-foreground mt-3 border-l-2 border-warning/40 pl-3">
+                      <span className="font-medium text-foreground">Pay Later:</span> {selectedPayment === 'bank'
+                        ? `Stock reserved 24h. Complete bank transfer within ${settings.bankTransferDeadlineHours || 72}h — order shows “Unpaid / Bank Transfer Pending” until verified, then moves to Processing.`
+                        : 'Stock reserved 24h. Complete payment from My Orders → Pay Now. Until then status is “Unpaid” and order is not yet being prepared.'}
                     </p>
                   )}
                 </div>
@@ -808,6 +830,37 @@ export function Checkout() {
                 )}
                 {couponError && <p role="alert" className="text-xs text-destructive mt-1">{couponError}</p>}
               </div>
+
+              {stockIssues.length > 0 && (
+                <div
+                  role="alert"
+                  className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3"
+                >
+                  <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                    <AlertTriangle aria-hidden="true" className="h-4 w-4" />
+                    {stockIssues.length === 1
+                      ? '1 item is no longer available'
+                      : `${stockIssues.length} items are no longer available`}
+                  </p>
+                  <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs text-destructive">
+                    {stockIssues.map((issue) => (
+                      <li key={issue.cartItemId}>{issue.message}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    to="/cart"
+                    className="mt-2 inline-block text-xs font-medium text-destructive underline underline-offset-2"
+                  >
+                    Update your cart
+                  </Link>
+                </div>
+              )}
+
+              {stockNotices.length > 0 && stockIssues.length === 0 && (
+                <p role="status" className="mb-4 text-xs text-amber-600 dark:text-amber-500">
+                  {stockNotices.map((notice) => notice.message).join(' ')}
+                </p>
+              )}
 
               <div className="space-y-4 mb-6 max-h-80 overflow-y-auto">
                 {cartItems.map((item) => (

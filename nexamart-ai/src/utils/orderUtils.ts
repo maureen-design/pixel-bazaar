@@ -71,20 +71,6 @@ export async function createOrder(
   }
 }
 
-export async function releaseStock(orderId: string): Promise<void> {
-  try {
-    // Delegates to the authoritative, idempotent server-side RPC so that both
-    // base stock_quantity and variant-combination stock are restored exactly
-    // once. The RPC guards against releasing for paid/delivered/processing/
-    // shipped orders and against double-release via orders.stock_released.
-    // Not wired into any client polling path on purpose (server callbacks are
-    // the authoritative release point to avoid double-releasing).
-    await supabase.rpc('release_stock_for_order', { p_order_id: orderId });
-  } catch (error) {
-    console.error('Error releasing stock:', error);
-  }
-}
-
 export async function getOrderById(orderId: string): Promise<Order | null> {
   try {
     const { data, error } = await supabase

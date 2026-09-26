@@ -165,19 +165,33 @@ export function Search() {
                 <p className="text-muted-foreground text-sm">{error}</p>
               </div>
             ) : data.length === 0 ? (
-              <div className="text-center py-16">
+              <div className="text-center py-16 bg-card border border-border rounded-xl">
                 <SearchIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h2 className="text-xl text-foreground font-medium mb-2">No products found</h2>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-2">
                   {query
-                    ? `No results for "${query}". Try adjusting your search or filters.`
-                    : 'Enter a search term to find products.'}
+                    ? `No results for "${query}". Try a broader term or remove a filter.`
+                    : 'Try a keyword like “shoes”, “laptop”, or a brand like “Samsung”.'}
                 </p>
-                {hasFilters && (
-                  <Button variant="outline" onClick={clearFilters}>
-                    Clear Filters
-                  </Button>
+                {query ? (
+                  <p className="text-xs text-muted-foreground mb-6">
+                    Tips: check spelling, use fewer filters, or try the AI Assistant for natural language search.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mb-6">
+                    Use filters on the left to narrow by category, brand, or price — or ask the AI Assistant.
+                  </p>
                 )}
+                <div className="flex gap-3 justify-center flex-wrap">
+                  {hasFilters && (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Clear Filters
+                    </Button>
+                  )}
+                  <Button variant="default" onClick={() => setShowAIAssistant(true)} className="gap-2">
+                    <Sparkles className="w-4 h-4" /> Try AI Assistant
+                  </Button>
+                </div>
               </div>
             ) : (
               <>

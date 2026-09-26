@@ -7,6 +7,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { AISearchBar } from './AISearchBar';
 import { ShoppingAssistantModal } from './ai/ShoppingAssistantModal';
 import { Button } from './ui/button';
+import { toast } from 'sonner';
 import { Monogram } from './Monogram';
 import {
   DropdownMenu,
@@ -108,6 +109,7 @@ export function Navbar() {
 
         navigate(params.size > 0 ? `/search?${params.toString()}` : `/search?q=${encodeURIComponent(trimmed)}`);
       } catch {
+        toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
         navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       } finally {
         setDesktopLoading(false);
@@ -470,6 +472,25 @@ export function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Category Navigation */}
+      {categories.length > 0 && (
+        <div className="border-t border-border/50 md:hidden">
+          <div className="max-w-7xl mx-auto px-4">
+            <nav aria-label="Product categories" className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-2">
+              {categories.map((category) => (
+                <Link
+                  key={category.id}
+                  to={`/search?category=${category.id}`}
+                  className="flex-shrink-0 inline-flex items-center min-h-11 px-3.5 rounded-full border border-border bg-card/60 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {category.name}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
 
       {/* Search Bar Section */}
       <div className="border-t border-border/50 md:hidden">

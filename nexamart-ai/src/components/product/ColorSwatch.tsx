@@ -37,22 +37,29 @@ export function ColorSwatch({ colorName, selected, disabled, onClick }: ColorSwa
       disabled={disabled}
       title={colorName}
       aria-label={colorName}
-      className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${
-        selected
-          ? 'border-primary ring-2 ring-primary/30 scale-110'
-          : 'border-border hover:border-primary/60'
-      } ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-      style={{ backgroundColor: hex }}
+      aria-pressed={selected}
+      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+        disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+      }`}
     >
-      {selected && (
-        <Check
-          className={`w-4 h-4 ${isLight ? 'text-gray-900' : 'text-white'}`}
-          strokeWidth={3}
-        />
-      )}
-      {!selected && isLight && (
-        <span className="w-full h-full rounded-full border border-border/50" />
-      )}
+      <span
+        className={`w-9 h-9 rounded-full border-2 flex items-center justify-center ${
+          selected
+            ? 'border-primary ring-2 ring-primary/30 scale-110'
+            : 'border-border hover:border-primary/60'
+        }`}
+        style={{ backgroundColor: hex }}
+      >
+        {selected && (
+          <Check
+            className={`w-4 h-4 ${isLight ? 'text-gray-900' : 'text-white'}`}
+            strokeWidth={3}
+          />
+        )}
+        {!selected && isLight && (
+          <span className="w-full h-full rounded-full border border-border/50" />
+        )}
+      </span>
     </button>
   );
 }

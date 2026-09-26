@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useCategories } from '../hooks/useCategories';
 import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { supabase } from '../lib/supabaseClient';
 
-const PRODUCT_TYPE_OPTIONS = [
+const PRODUCT_TYPE_FALLBACK = [
   { value: 'tshirt', label: 'T-Shirt' },
   { value: 'hoodie', label: 'Hoodie' },
   { value: 'dress', label: 'Dress' },
@@ -34,11 +35,49 @@ const PRODUCT_TYPE_OPTIONS = [
   { value: 'charger', label: 'Charger' },
 ];
 
-const BRAND_OPTIONS = [
+const BRAND_FALLBACK = [
   'Apple', 'Samsung', 'Sony', 'Google', 'Xiaomi', 'OnePlus', 'Lenovo', 'Dell', 'ASUS',
   'HP', 'Microsoft', 'LG', 'Garmin', 'Bose', 'JBL', 'Sonos', 'Ultimate Ears', 'Logitech',
   'Razer', 'Keychron', 'Anker', 'SanDisk', 'Canon', 'Nike', 'Dior', 'IKEA', 'Adidas',
 ].map((brand) => ({ value: brand, label: brand }));
+
+function useFilterOptions() {
+  const [brands, setBrands] = useState<{ value: string; label: string }[] | null>(null);
+  const [productTypes, setProductTypes] = useState<{ value: string; label: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('brand, product_type')
+          .eq('status', 'active')
+          .limit(1000);
+        if (error || !data || cancelled) return;
+        const brandSet = new Set<string>();
+        const typeSet = new Set<string>();
+        for (const r of data) {
+          if (r.brand && typeof r.brand === 'string' && r.brand.trim()) brandSet.add(r.brand.trim());
+          if (r.product_type && typeof r.product_type === 'string' && r.product_type.trim()) typeSet.add(r.product_type.trim());
+        }
+        const labelForType = (v: string) => {
+          const hit = PRODUCT_TYPE_FALLBACK.find((o) => o.value === v);
+          if (hit) return hit.label;
+          return v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        };
+        if (!cancelled && brandSet.size > 0) setBrands(Array.from(brandSet).sort().map((b) => ({ value: b, label: b })));
+        if (!cancelled && typeSet.size > 0) setProductTypes(Array.from(typeSet).sort().map((v) => ({ value: v, label: labelForType(v) })));
+      } catch { /* fallback */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return {
+    brandOptions: brands ?? BRAND_FALLBACK,
+    productTypeOptions: productTypes ?? PRODUCT_TYPE_FALLBACK,
+  };
+}
 
 const COLOR_OPTIONS = [
   'black', 'white', 'navy', 'red', 'blue', 'green', 'grey', 'olive',
@@ -83,6 +122,7 @@ export function SearchFilters({
   hasFilters,
 }: SearchFiltersProps) {
   const { categories } = useCategories();
+  const { brandOptions, productTypeOptions } = useFilterOptions();
 
   const sortOptions = useMemo(() => [
     { value: 'name_asc', label: 'Name (A-Z)' },
@@ -131,7 +171,7 @@ export function SearchFilters({
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
             <SelectItem value="">All Types</SelectItem>
-            {PRODUCT_TYPE_OPTIONS.map((opt) => (
+            {productTypeOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>
@@ -148,7 +188,7 @@ export function SearchFilters({
           </SelectTrigger>
           <SelectContent className="bg-muted border-border">
             <SelectItem value="">All Brands</SelectItem>
-            {BRAND_OPTIONS.map((opt) => (
+            {brandOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>

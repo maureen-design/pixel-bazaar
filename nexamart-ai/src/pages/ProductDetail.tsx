@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send } from 'lucide-react';
+import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send, ShieldCheck } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
@@ -16,6 +16,9 @@ import { ProductGallery } from '../components/product/ProductGallery';
 import { toast } from 'sonner';
 import { formatPrice } from '../config/pricing';
 import { SpeakButton } from '../components/ui/SpeakButton';
+import { Badge } from '../components/ui/badge';
+import { countryFlag } from '../utils/flags';
+import { getStockState } from '../lib/stock';
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -179,7 +182,11 @@ export function ProductDetail() {
   const effectiveStock = hasVariants
     ? (selectedVariant ? selectedVariant.stock : null)
     : product.stock_quantity;
-  const isOutOfStock = selectionReady ? effectiveStock === 0 : false;
+  const stockState = selectionReady
+    ? getStockState(effectiveStock, { productStatus: product.status })
+    : 'unknown';
+  const isOutOfStock = selectionReady ? stockState === 'out_of_stock' : false;
+  const isLowStock = selectionReady && stockState === 'low';
 
   // Color-driven gallery resolution
   const selectedColor =
@@ -262,7 +269,7 @@ export function ProductDetail() {
         {/* Back Button */}
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          className="inline-flex items-center gap-2 min-h-11 -ml-2 px-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
@@ -281,7 +288,17 @@ export function ProductDetail() {
 
           {/* Product Info */}
           <div>
-            <h1 className="text-3xl font-bold mb-4">{product.name}</h1>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <h1 className="text-3xl font-bold">{product.name}</h1>
+              {isOutOfStock && (
+                <Badge variant="destructive">Out of stock</Badge>
+              )}
+              {!isOutOfStock && isLowStock && (
+                <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning/15 px-2.5 py-0.5 text-xs font-medium text-warning">
+                  Only {effectiveStock} left
+                </span>
+              )}
+            </div>
             
             <div className="flex items-center gap-2 mb-4">
               <div className="flex items-center gap-1" aria-label={`${product.rating} out of 5 stars`} role="img">
@@ -304,41 +321,6 @@ export function ProductDetail() {
             <p className="text-secondary-foreground mb-6 leading-relaxed">
               {product.description}
             </p>
-
-            {/* AI Explain This Product */}
-            <div className="mb-6">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExplain}
-                disabled={explaining}
-                className="gap-2"
-              >
-                {explaining ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 text-primary" />
-                )}
-                {explaining ? 'Explaining...' : 'Explain This Product with AI'}
-              </Button>
-              {explanation && (
-                <div className="mt-3 bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-secondary-foreground">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-                      <Sparkles aria-hidden="true" className="w-3 h-3" />
-                      AI Explanation
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <SpeakButton text={explanation} label="Read explanation aloud" />
-                      <button onClick={() => setExplanation(null)} aria-label="Dismiss explanation">
-                        <X aria-hidden="true" className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="whitespace-pre-line">{explanation}</p>
-                </div>
-              )}
-            </div>
 
             {/* Variant Selector */}
             {hasVariants && (
@@ -364,47 +346,61 @@ export function ProductDetail() {
 
             {/* Vendor Info */}
             {product.vendor && (
-              <div className="bg-card rounded-lg p-4 mb-6 border border-border">
+              <div className="bg-card rounded-lg p-4 mb-6 border border-border flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-dark rounded-lg flex items-center justify-center">
                     <Store className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-foreground font-medium">{product.vendor.store_name}</p>
-                    <p className="text-muted-foreground text-sm">Verified Vendor</p>
+                    <p className="text-foreground font-semibold flex items-center gap-1.5">
+                      {product.vendor.store_name}
+                      {product.vendor.country && <span role="img" aria-label={product.vendor.country}>{countryFlag(product.vendor.country)}</span>}
+                    </p>
+                    <p className="text-muted-foreground text-sm flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-success" /> Verified Vendor · Ships from {product.vendor.country || 'Kenya'}</p>
                   </div>
                 </div>
+                <Badge variant="secondary" className="hidden sm:inline-flex">Sold by {product.vendor.store_name}</Badge>
               </div>
             )}
 
             {/* Quantity Selector */}
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-4 mb-6">
               <span className="text-secondary-foreground">Quantity:</span>
-              <div className="flex items-center gap-2 bg-card rounded-lg border border-border">
+              <div className="flex items-center gap-1 bg-card rounded-lg border border-border">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   aria-label="Decrease quantity"
-                  className="p-2 hover:bg-muted transition-colors"
+                  className="h-11 w-11 flex items-center justify-center rounded-l-lg hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   disabled={quantity <= 1}
                 >
                   <Minus aria-hidden="true" className="w-4 h-4" />
                 </button>
-                <span className="w-12 text-center">{quantity}</span>
+                <span className="w-12 text-center" aria-live="polite">{quantity}</span>
                 <button
                   onClick={() => setQuantity(Math.min(effectiveStock ?? 0, quantity + 1))}
                   aria-label="Increase quantity"
-                  className="p-2 hover:bg-muted transition-colors"
-                  disabled={!selectionReady || quantity >= (effectiveStock ?? 0)}
+                  className="h-11 w-11 flex items-center justify-center rounded-r-lg hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={!selectionReady || isOutOfStock || quantity >= (effectiveStock ?? 0)}
                 >
                   <Plus aria-hidden="true" className="w-4 h-4" />
                 </button>
               </div>
-              <span className="text-muted-foreground text-sm">
+              <span
+                className={`text-sm ${
+                  isOutOfStock
+                    ? 'text-muted-foreground'
+                    : isLowStock
+                      ? 'text-warning font-medium'
+                      : 'text-muted-foreground'
+                }`}
+              >
                 {!selectionReady
                   ? 'Select options to see availability'
                   : isOutOfStock
-                    ? 'Out of stock'
-                    : `${effectiveStock ?? 0} available`}
+                    ? 'Out of stock — check back later'
+                    : isLowStock
+                      ? `Only ${effectiveStock} left`
+                      : `${effectiveStock ?? 0} available`}
               </span>
             </div>
 
@@ -419,7 +415,11 @@ export function ProductDetail() {
                 className="flex-1 py-4 text-lg gap-2"
               >
                 <Zap className="w-5 h-5" />
-                {hasVariants && !selectedVariant ? 'Select Options' : 'Buy Now'}
+                {isOutOfStock
+                  ? 'Out of Stock'
+                  : hasVariants && !selectedVariant
+                    ? 'Select Options'
+                    : 'Buy Now'}
               </Button>
               <Button
                 variant="outline"
@@ -429,8 +429,58 @@ export function ProductDetail() {
                 className="flex-1 py-4 text-lg gap-2"
               >
                 <ShoppingCart className="w-5 h-5" />
-                {hasVariants && !selectedVariant ? 'Select Options' : 'Add to Cart'}
+                {isOutOfStock
+                  ? 'Out of Stock'
+                  : hasVariants && !selectedVariant
+                    ? 'Select Options'
+                    : 'Add to Cart'}
               </Button>
+            </div>
+
+            {/* AI Explain This Product */}
+            <div className="mt-6 rounded-xl border border-border bg-card/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Sparkles aria-hidden="true" className="w-4 h-4 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Not sure this is right for you?</p>
+                    <p className="text-xs text-muted-foreground">
+                      Get a plain-language summary of who this product is for.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExplain}
+                  disabled={explaining}
+                  className="gap-2"
+                >
+                  {explaining ? (
+                    <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles aria-hidden="true" className="w-4 h-4 text-primary" />
+                  )}
+                  {explaining ? 'Explaining...' : 'Explain with AI'}
+                </Button>
+              </div>
+              {explanation && (
+                <div className="mt-3 bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-secondary-foreground">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      <Sparkles aria-hidden="true" className="w-3 h-3" />
+                      AI Explanation
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <SpeakButton text={explanation} label="Read explanation aloud" />
+                      <button onClick={() => setExplanation(null)} aria-label="Dismiss explanation">
+                        <X aria-hidden="true" className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="whitespace-pre-line">{explanation}</p>
+                </div>
+              )}
             </div>
 
             {/* Category */}
