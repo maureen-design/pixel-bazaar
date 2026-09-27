@@ -84,9 +84,9 @@ export function FeaturedVendors() {
                   </div>
                 </div>
               </div>
-              {vendor.description && (
+              {vendor.store_description && (
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                  {vendor.description}
+                  {vendor.store_description}
                 </p>
               )}
             </Link>

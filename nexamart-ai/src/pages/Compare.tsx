@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
@@ -92,7 +92,8 @@ export function Compare() {
     }
   };
 
-  const specRows: { label: string; get: (p: Product) => string }[] = [
+  // get returns ReactNode, not string, so the Vendor row can render a Link.
+  const specRows: { label: string; get: (p: Product) => React.ReactNode }[] = [
     { label: 'Price', get: (p) => formatPrice(p.price) },
     {
       label: 'Compare Price',
@@ -101,7 +102,20 @@ export function Compare() {
     { label: 'Rating', get: (p) => (p.rating ? `${p.rating} / 5` : '—') },
     { label: 'Stock', get: (p) => `${p.stock_quantity} in stock` },
     { label: 'Category', get: (p) => p.category?.name || '—' },
-    { label: 'Vendor', get: (p) => p.vendor?.store_name || '—' },
+    {
+      label: 'Vendor',
+      get: (p) =>
+        p.vendor ? (
+          <Link
+            to={`/store/${p.vendor.id}`}
+            className="text-primary hover:underline"
+          >
+            {p.vendor.store_name}
+          </Link>
+        ) : (
+          '—'
+        ),
+    },
   ];
 
   return (

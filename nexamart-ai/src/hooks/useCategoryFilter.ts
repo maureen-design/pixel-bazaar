@@ -77,13 +77,13 @@ export function useCategoryFilter(categoryId: string | null) {
           .from('products')
           .select(`
             *,
-            vendors!inner (
+            vendor:vendors!inner (
               id,
               store_name,
               store_logo,
               country
             ),
-            categories!inner (
+            category:categories!inner (
               id,
               name,
               slug

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
-import { formatPrice } from '../../config/pricing';
+
 
 const PAGE_SIZE = 15;
 
@@ -35,10 +35,14 @@ export function AdminVendors() {
 
   const fetchVendors = async () => {
     try {
-      const { data } = await supabase
-        .from('vendors')
-        .select('*, profiles!inner(full_name, email, created_at)')
-        .order('created_at', { ascending: false });
+      // admin_list_vendors() replaces `select('*, profiles!inner(full_name,
+      // email, created_at))`. Migration 0032 revoked SELECT on phone /
+      // rejection_* / user_id for authenticated sessions, which breaks the star
+      // and also breaks the embed, since PostgREST resolves that join through
+      // vendors.user_id. The definer returns the private columns plus the
+      // applicant identity, so the profiles embed is no longer needed.
+      const { data, error } = await supabase.rpc('admin_list_vendors');
+      if (error) throw error;
       setVendors(data || []);
     } catch (err: any) {
       console.error(err);
@@ -66,11 +70,14 @@ export function AdminVendors() {
   const rejectVendor = async (id: string, reason?: string) => {
     const { error } = await supabase.rpc('reject_vendor', { target_vendor_id: id });
     if (error) { toast.error('Failed to reject'); return; }
-    // Update rejection count and timestamp
-    await supabase.from('vendors').update({
+    // Update rejection count and timestamp.
+    // rejection_reason / last_rejected_at moved off vendors to vendor_private in
+    // migration 0034, so anon can hold table-level SELECT on vendors (which the
+    // product embeds require) without being able to read moderation history.
+    await supabase.from('vendor_private').update({
       rejection_reason: reason || null,
       last_rejected_at: new Date().toISOString(),
-    }).eq('id', id);
+    }).eq('vendor_id', id);
     // Log the action
     await supabase.from('activity_logs').insert({
       user_id: user?.id || null,
@@ -84,7 +91,7 @@ export function AdminVendors() {
   };
 
   const filtered = vendors.filter((v) => {
-    const matchesSearch = v.business_name?.toLowerCase().includes(search.toLowerCase()) || v.profiles?.email?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = v.business_name?.toLowerCase().includes(search.toLowerCase()) || v.applicant_email?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'approved' && v.is_verified) || (statusFilter === 'pending' && !v.is_verified);
     return matchesSearch && matchesStatus;
   });
@@ -320,13 +327,13 @@ export function AdminVendors() {
                             <span className="font-medium">{v.business_name || v.store_name}</span>
                           </div>
                         </td>
-                        <td className="p-4">{v.profiles?.full_name}</td>
-                        <td className="p-4 text-muted-foreground">{v.profiles?.email}</td>
+                        <td className="p-4">{v.applicant_full_name}</td>
+                        <td className="p-4 text-muted-foreground">{v.applicant_email}</td>
                         <td className="p-4">
                           <Badge variant={v.is_verified ? 'default' : 'secondary'}>{v.is_verified ? 'Approved' : 'Pending'}</Badge>
                         </td>
-                        <td className="p-4">{v.rating || '-'}</td>
-                        <td className="p-4">{v.total_sales != null ? formatPrice(v.total_sales) : '-'}</td>
+                        <td className="p-4">{v.rating > 0 ? Number(v.rating).toFixed(1) : '-'}</td>
+                        <td className="p-4">{v.total_sales > 0 ? v.total_sales.toLocaleString() : '-'}</td>
                         <td className="p-4 text-muted-foreground">{formatDate(v.created_at)}</td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -366,7 +373,7 @@ export function AdminVendors() {
                 )}
                 <div>
                   <h3 className="text-lg font-semibold">{selectedVendor.business_name || selectedVendor.store_name}</h3>
-                  <p className="text-muted-foreground">{selectedVendor.profiles?.email}</p>
+                  <p className="text-muted-foreground">{selectedVendor.applicant_email}</p>
                 </div>
               </div>
               {selectedVendor.store_description && (
@@ -376,9 +383,9 @@ export function AdminVendors() {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Owner:</span> <span className="text-foreground ml-2">{selectedVendor.profiles?.full_name}</span></div>
-                <div><span className="text-muted-foreground">Rating:</span> <span className="text-foreground ml-2">{selectedVendor.rating || 'N/A'}</span></div>
-                <div><span className="text-muted-foreground">Total Sales:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales != null ? formatPrice(selectedVendor.total_sales) : 'N/A'}</span></div>
+                <div><span className="text-muted-foreground">Owner:</span> <span className="text-foreground ml-2">{selectedVendor.applicant_full_name}</span></div>
+                <div><span className="text-muted-foreground">Rating:</span> <span className="text-foreground ml-2">{selectedVendor.rating > 0 ? Number(selectedVendor.rating).toFixed(1) + ' / 5' : 'No ratings yet'}</span></div>
+                <div><span className="text-muted-foreground">Total Sales:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales > 0 ? selectedVendor.total_sales.toLocaleString() : 'N/A'}</span></div>
                 <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedVendor.is_verified ? 'default' : 'secondary'} className="ml-2">{selectedVendor.is_verified ? 'Approved' : 'Pending'}</Badge></div>
                 <div><span className="text-muted-foreground">Joined:</span> <span className="text-foreground ml-2">{formatDate(selectedVendor.created_at)}</span></div>
               </div>

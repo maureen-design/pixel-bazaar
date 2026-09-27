@@ -360,7 +360,11 @@ export function VendorSettings() {
           </div>
           <div>
             <p className="text-muted-foreground">Total Sales</p>
-            <p className="font-medium">{vendor?.total_sales || 0} orders</p>
+            <p className="font-medium">
+              {vendor?.total_sales > 0
+                ? `${vendor.total_sales.toLocaleString()} orders`
+                : <span className="text-muted-foreground">Not yet tracked</span>}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Member Since</p>

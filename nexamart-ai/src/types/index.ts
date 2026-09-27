@@ -43,6 +43,11 @@ export interface Product {
     store_name: string;
     store_logo: string;
     country?: string | null;
+    /**
+     * Only selected by hooks that need it (currently useProduct). Absent on the
+     * others, so treat as optional and never assert on it without a fallback.
+     */
+    is_verified?: boolean;
   };
   category?: {
     id: string;
@@ -65,9 +70,31 @@ export interface Vendor {
   id: string;
   store_name: string;
   store_logo: string;
-  description: string;
+  store_description?: string | null;
   rating: number;
   country?: string | null;
+}
+
+/**
+ * Public store profile for /store/:id.
+ *
+ * Deliberately an explicit allow-list rather than `Vendor`. Since migration
+ * 0034, `vendors` holds nothing but public fields, but the storefront is still
+ * readable by anon under a `using (true)` policy, so this allow-list is still
+ * what stops a future column from reaching buyers by accident. Keep it in step
+ * with the columns in `0034_vendor_private_split.sql` that were kept.
+ */
+export interface Store {
+  id: string;
+  store_name: string;
+  store_description: string | null;
+  store_logo: string | null;
+  store_cover: string | null;
+  country: string | null;
+  city: string | null;
+  business_name: string | null;
+  is_verified: boolean;
+  created_at: string;
 }
 
 export interface CartItem {

@@ -1,0 +1,54 @@
+-- ============================================================================
+-- Migration: 0033_vendor_embed_grant.sql
+--
+-- Restores the table-level SELECT that PostgREST requires for embedded
+-- resources, and nothing else.
+--
+-- History, because the shape of this file is not obvious
+--   0032 removed table-level SELECT from anon/authenticated and replaced it
+--   with a column-level grant on the 14 public columns. Postgres honoured that
+--   - `set role anon; select store_name from public.vendors` worked fine - but
+--   PostgREST could not resolve the relation at all:
+--
+--     {"code":"42501","hint":"Grant the required privileges to the current
+--      role with: GRANT SELECT ON public.vendors TO anon;",
+--      "message":"permission denied for table vendors"}
+--
+--   Every `vendor:vendors!inner(...)` embed in the app failed, so product
+--   grids, the product detail vendor block, search, category and wishlist all
+--   rendered empty. This file fixes that.
+--
+-- Why there is no `revoke select (phone, ...)` here any more
+--   An earlier version of this migration also tried to subtract the private
+--   columns back off that table grant. That does not work, and the reason is
+--   worth recording because the intuition is wrong in a way that is easy to
+--   repeat:
+--
+--     table-level and column-level privileges are INDEPENDENT and ORed.
+--     The effective privilege on a column is the UNION of relacl and attacl.
+--     A column-level REVOKE can only subtract a grant that lives in attacl.
+--     It cannot mask a grant that lives in relacl.
+--
+--   Live evidence: after running it, attacl on all five private columns was
+--   still NULL and has_column_privilege('anon','vendors','phone','SELECT') was
+--   still true, so anon read user_id, phone, rejection_reason, rejection_count
+--   and last_rejected_at in full. The statement reported "Success. No rows
+--   returned", which is simply what a no-op looks like.
+--
+--   Consequence, and the reason 0034 exists: there is no way to deny specific
+--   columns from a role holding table-level SELECT. A column can only be
+--   hidden from anon by not existing on a table anon can read. 0034 moves
+--   phone / rejection_reason / rejection_count / last_rejected_at to
+--   public.vendor_private, after which this grant becomes harmless.
+--
+-- Apply order: 0032, then 0033, then 0034.
+-- Idempotent: re-running is a no-op.
+-- ============================================================================
+
+-- The whole point: PostgREST needs table-level SELECT to surface the relation
+-- and plan an embed. A column-level grant does not satisfy it.
+grant select on public.vendors to anon, authenticated;
+
+-- ============================================================================
+-- End of migration
+-- ============================================================================

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send, ShieldCheck } from 'lucide-react';
+import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
@@ -353,13 +353,37 @@ export function ProductDetail() {
                   </div>
                   <div>
                     <p className="text-foreground font-semibold flex items-center gap-1.5">
-                      {product.vendor.store_name}
+                      <Link
+                        to={`/store/${product.vendor.id}`}
+                        className="hover:text-primary transition-colors"
+                      >
+                        {product.vendor.store_name}
+                      </Link>
                       {product.vendor.country && <span role="img" aria-label={product.vendor.country}>{countryFlag(product.vendor.country)}</span>}
                     </p>
-                    <p className="text-muted-foreground text-sm flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-success" /> Verified Vendor · Ships from {product.vendor.country || 'Kenya'}</p>
+                    {product.vendor.is_verified ? (
+                      <p className="text-muted-foreground text-sm flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-success" aria-hidden="true" />
+                        Verified Vendor
+                        {product.vendor.country && ` · Ships from ${product.vendor.country}`}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground text-sm flex items-center gap-1">
+                        <ShieldQuestion className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                        Verification pending
+                      </p>
+                    )}
                   </div>
                 </div>
-                <Badge variant="secondary" className="hidden sm:inline-flex">Sold by {product.vendor.store_name}</Badge>
+                <Link
+                  to={`/store/${product.vendor.id}`}
+                  className="hidden sm:inline-flex shrink-0"
+                >
+                  <Badge variant="secondary" className="hover:bg-primary/10 transition-colors">
+                    <Store className="w-3.5 h-3.5" aria-hidden="true" />
+                    Visit store
+                  </Badge>
+                </Link>
               </div>
             )}
 

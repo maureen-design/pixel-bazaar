@@ -24,6 +24,17 @@ function formatPercent(current: number, previous: number) {
   return `${change >= 0 ? '+' : ''}${Math.round(change)}%`;
 }
 
+// Row shape returned by public.admin_list_vendors(). Declared locally so the
+// pending-vendor slice below does not fall back to `any`.
+interface AdminVendorRow {
+  id: string;
+  business_name: string | null;
+  store_name: string;
+  is_verified: boolean;
+  created_at: string;
+  applicant_email: string | null;
+}
+
 function StatCardSkeleton() {
   return (
     <Card className="p-6 bg-card border-border">
@@ -100,12 +111,16 @@ export function AdminDashboard() {
         .limit(5);
       setRecentOrders(recent || []);
 
-      const { data: pending } = await supabase
-        .from('vendors')
-        .select('*, profiles!inner(full_name, email)')
-        .eq('is_verified', false)
-        .order('created_at', { ascending: true });
-      setPendingVendors(pending || []);
+      // Same switch as admin/Vendors.tsx: the star and the profiles embed both
+      // depend on columns migration 0032 revoked from authenticated sessions
+      // (the embed resolves through vendors.user_id). The RPC returns the
+      // applicant identity directly, and the pending slice is filtered here so
+      // the "oldest first" ordering this panel used is preserved.
+      const { data: allVendors } = await supabase.rpc('admin_list_vendors');
+      const pending: AdminVendorRow[] = ((allVendors ?? []) as AdminVendorRow[])
+        .filter((v) => !v.is_verified)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+      setPendingVendors(pending);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
     } finally {
@@ -296,7 +311,7 @@ export function AdminDashboard() {
                     <div className="flex items-center justify-between mb-2">
                       <div>
                         <p className="font-medium">{v.business_name || v.store_name}</p>
-                        <p className="text-sm text-muted-foreground">{v.profiles?.email}</p>
+                        <p className="text-sm text-muted-foreground">{v.applicant_email}</p>
                       </div>
                       <Badge variant="secondary">Pending</Badge>
                     </div>

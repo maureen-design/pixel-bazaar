@@ -111,30 +111,47 @@ export function VendorApply() {
     setLoading(true);
 
     try {
-      // Check if user already has a pending application
+      // Check if user already has a pending application.
+      // get_my_vendor() rather than `select * from vendors where user_id = ...`:
+      // migration 0032 revoked SELECT on user_id for authenticated sessions, so
+      // both the star and the ownership filter are no longer permitted. Same
+      // migration, same reason as the AuthContext lookup.
       const { data: existingVendor } = await supabase
-        .from('vendors')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+        .rpc('get_my_vendor')
+        .maybeSingle();
 
       if (existingVendor) {
         toast.error('You already have a vendor application');
         return;
       }
 
-      // Create vendor application
-      const { error } = await supabase.from('vendors').insert({
-        user_id: user.id,
-        store_name: formData.business_name,
-        store_description: formData.business_description,
-        phone: formData.phone.trim(),
-        city: formData.city.trim(),
-        main_categories: formData.main_categories.join(', '),
-        is_verified: false,
-      });
+      // Create vendor application. `phone` is NOT a vendors column any more:
+      // migration 0034 moved it to vendor_private, because a role holding
+      // table-level SELECT on vendors cannot be denied individual columns, and
+      // that table-level grant is what PostgREST needs for the product embeds.
+      // The public half goes in first; trg_vendors_ensure_private_row creates
+      // the matching vendor_private row, so the upsert below cannot orphan and
+      // is safe to retry.
+      const { data: created, error } = await supabase
+        .from('vendors')
+        .insert({
+          user_id: user.id,
+          store_name: formData.business_name,
+          store_description: formData.business_description,
+          city: formData.city.trim(),
+          main_categories: formData.main_categories.join(', '),
+          is_verified: false,
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      const { error: privateError } = await supabase
+        .from('vendor_private')
+        .upsert({ vendor_id: created.id, phone: formData.phone.trim() });
+
+      if (privateError) throw privateError;
 
       setSubmitted(true);
       toast.success('Application submitted successfully!');

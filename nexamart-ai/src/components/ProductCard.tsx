@@ -66,11 +66,22 @@ export function ProductCard({ product }: ProductCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Link
-        to={`/product/${product.id}`}
-        className="group bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all motion-spring block"
-      >
-        <div className="relative aspect-square overflow-hidden bg-muted">
+      <div className="group relative bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 hover:-translate-y-1 hover:shadow-lg transition-all motion-spring">
+        {/*
+          Stretched link: the card stays one big click target without wrapping
+          the whole card in an <a>, which would nest the store link, wishlist
+          and compare buttons inside an anchor (invalid HTML, and screen
+          readers announce one link with no distinct target).
+        */}
+        <Link
+          to={`/product/${product.id}`}
+          className="absolute inset-0 z-0 rounded-xl"
+          aria-label={product.name}
+        >
+          <span className="sr-only">{product.name}</span>
+        </Link>
+
+        <div className="relative aspect-square overflow-hidden bg-muted pointer-events-none">
           <SafeImg
             src={product.images?.[0]}
             alt={product.name}
@@ -98,27 +109,45 @@ export function ProductCard({ product }: ProductCardProps) {
               </Badge>
             </div>
           )}
-          <div className="absolute top-2 right-2 flex flex-col gap-1">
+          <div className="absolute top-2 right-2 flex flex-col gap-1 pointer-events-auto">
             <CompareButton product={product} />
             <WishlistButton productId={product.id} />
           </div>
         </div>
-        
+
+        {/*
+          Unpositioned on purpose: a positioned ancestor would paint above the
+          stretched link and swallow clicks on the title and price. Interactive
+          children opt back in with relative z-10 below.
+        */}
         <div className="p-4">
           <h3 className="text-foreground font-medium mb-2 line-clamp-2 min-h-[2.5rem]">
             {product.name}
           </h3>
           
-          <p className="inline-flex items-center gap-1.5 text-sm mb-2 bg-muted/60 border border-border rounded-full px-2.5 py-1">
-            <Store className="w-3.5 h-3.5 text-muted-foreground" />
-            {countryFlag(product.vendor?.country) && (
-              <span role="img" aria-label={product.vendor?.country ?? undefined}>
-                {countryFlag(product.vendor?.country)}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            {product.vendor ? (
+              <Link
+                to={`/store/${product.vendor.id}`}
+                className="relative z-10 pointer-events-auto inline-flex items-center gap-1.5 text-sm bg-muted/60 border border-border rounded-full px-2.5 py-1 hover:border-primary/50 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Store className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                {countryFlag(product.vendor.country) && (
+                  <span role="img" aria-label={product.vendor.country ?? undefined}>
+                    {countryFlag(product.vendor.country)}
+                  </span>
+                )}
+                <span className="font-medium text-foreground">{product.vendor.store_name}</span>
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-sm bg-muted/60 border border-border rounded-full px-2.5 py-1">
+                <Store className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+                <span className="font-medium text-foreground">NexaMart</span>
               </span>
             )}
-            <span className="font-medium text-foreground">{product.vendor?.store_name || 'NexaMart'}</span>
-            <span className="text-muted-foreground/60">· {timeAgo(product.created_at)}</span>
-          </p>
+            <span className="text-xs text-muted-foreground/60">{timeAgo(product.created_at)}</span>
+          </div>
           
           <div className="flex items-center gap-1 mb-3">
             {renderStars(product.rating)}
@@ -147,7 +176,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <p className="text-sm font-medium text-warning mb-3">Only {totalStock} left</p>
           ) : null}
 
-          <div className="transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100">
+          <div className="relative z-10 pointer-events-auto transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100">
             {hasVariants ? (
               <Button
                 variant="default"
@@ -155,6 +184,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 disabled={isOutOfStock}
                 onClick={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   navigate(`/product/${product.id}`);
                 }}
               >
@@ -173,7 +203,7 @@ export function ProductCard({ product }: ProductCardProps) {
             )}
           </div>
         </div>
-      </Link>
+      </div>
     </motion.div>
   );
 }

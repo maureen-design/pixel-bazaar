@@ -17,7 +17,8 @@ interface WishlistItem {
     rating: number;
     stock_quantity: number;
     vendor_id: string;
-    vendors?: {
+    vendor?: {
+      id: string;
       store_name: string;
     };
   };
@@ -64,7 +65,8 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
             rating,
             stock_quantity,
             vendor_id,
-            vendors (
+            vendor:vendors (
+              id,
               store_name
             )
           )

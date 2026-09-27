@@ -21,6 +21,7 @@ const AuthCallback = lazy(() => import('./pages/auth/AuthCallback').then(m => ({
 const AuthRedirect = lazy(() => import('./pages/auth/AuthRedirect').then(m => ({ default: m.AuthRedirect })));
 const Homepage = lazy(() => import('./pages/Homepage').then(m => ({ default: m.Homepage })));
 const ProductDetail = lazy(() => import('./pages/ProductDetail').then(m => ({ default: m.ProductDetail })));
+const StorePage = lazy(() => import('./pages/StorePage').then(m => ({ default: m.StorePage })));
 const Cart = lazy(() => import('./pages/Cart').then(m => ({ default: m.Cart })));
 const Checkout = lazy(() => import('./pages/Checkout').then(m => ({ default: m.Checkout })));
 const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation').then(m => ({ default: m.OrderConfirmation })));
@@ -112,6 +113,7 @@ function App() {
             <Route path="/" element={<Homepage />} />
             <Route path="/search" element={<Search />} />
             <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/store/:id" element={<StorePage />} />
             <Route path="/compare" element={<Compare />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/wishlist" element={<Wishlist />} />

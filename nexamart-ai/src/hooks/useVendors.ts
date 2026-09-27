@@ -5,7 +5,7 @@ interface VendorSummary {
   id: string;
   store_name: string;
   store_logo: string;
-  description: string;
+  store_description: string;
   rating: number;
   product_count: number;
 }
@@ -19,7 +19,7 @@ export function useFeaturedVendors(limit = 6) {
       try {
         const { data: vendorsData, error } = await supabase
           .from('vendors')
-          .select('id, store_name, store_logo, description, rating, country')
+          .select('id, store_name, store_logo, store_description, rating, country')
           .eq('is_verified', true)
           .order('rating', { ascending: false })
           .limit(limit);

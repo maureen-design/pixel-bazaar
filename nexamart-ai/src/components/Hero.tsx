@@ -38,7 +38,7 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
   useEffect(() => {
     supabase
       .from('products')
-      .select('id, name, images, price, rating, vendors(store_name, country)')
+      .select('id, name, images, price, rating, vendor:vendors(store_name, country)')
       .eq('status', 'active')
       .not('images', 'is', null)
       .order('rating', { ascending: false })
@@ -54,7 +54,7 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
             name: p.name,
             image: p.images[0],
             price: p.price,
-            vendor: p.vendors,
+            vendor: p.vendor,
           }))
         );
       });

@@ -188,8 +188,15 @@ export function Wishlist() {
                     </Link>
 
                     {/* Vendor */}
-                    {product.vendors?.store_name && (
-                      <p className="text-xs text-muted-foreground mb-1.5">{product.vendors.store_name}</p>
+                    {product.vendor?.store_name && (
+                      <p className="text-xs text-muted-foreground mb-1.5">
+                        <Link
+                          to={`/store/${product.vendor.id}`}
+                          className="hover:text-primary transition-colors"
+                        >
+                          {product.vendor.store_name}
+                        </Link>
+                      </p>
                     )}
 
                     {/* Rating */}

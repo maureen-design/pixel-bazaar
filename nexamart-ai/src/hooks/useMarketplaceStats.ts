@@ -14,9 +14,11 @@ export function useMarketplaceStats() {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'active');
 
+      // `id` rather than `*`: migration 0032 revoked SELECT on several vendors
+      // columns for anon, and a star would expand to them even on a head count.
       const { count: vendors } = await supabase
         .from('vendors')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('is_verified', true);
 
       if (!cancelled) {

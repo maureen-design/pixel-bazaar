@@ -17,12 +17,12 @@ export function useProducts() {
           .from('products')
           .select(`
             *,
-            vendors!inner (
+            vendor:vendors!inner (
               id,
               store_name,
               store_logo
             ),
-            categories!inner (
+            category:categories!inner (
               id,
               name,
               slug
@@ -70,12 +70,12 @@ export function useFeaturedProducts(categoryId?: string | null, page: number = 1
           .from('products')
           .select(`
             *,
-            vendors!inner (
+            vendor:vendors!inner (
               id,
               store_name,
               store_logo
             ),
-            categories!inner (
+            category:categories!inner (
               id,
               name,
               slug
@@ -145,12 +145,12 @@ export function useNewArrivals(categoryId?: string | null, page: number = 1, lim
           .from('products')
           .select(`
             *,
-            vendors!inner (
+            vendor:vendors!inner (
               id,
               store_name,
               store_logo
             ),
-            categories!inner (
+            category:categories!inner (
               id,
               name,
               slug
@@ -203,12 +203,14 @@ export function useProduct(id: string) {
           .from('products')
           .select(`
             *,
-            vendors!inner (
+            vendor:vendors!inner (
               id,
               store_name,
-              store_logo
+              store_logo,
+              country,
+              is_verified
             ),
-            categories!inner (
+            category:categories!inner (
               id,
               name,
               slug
@@ -266,12 +268,12 @@ export function useCompareProducts(searchTerm: string, selectedIds: string[], li
 
         const baseSelect = `
           *,
-          vendors!inner (
+          vendor:vendors!inner (
             id,
             store_name,
             store_logo
           ),
-          categories!inner (
+          category:categories!inner (
             id,
             name,
             slug
@@ -341,8 +343,8 @@ export function usePopularPicks(limit = 8) {
           .from('products')
           .select(`
             *,
-            vendors!inner (id, store_name, store_logo, country),
-            categories!inner (id, name, slug)
+            vendor:vendors!inner (id, store_name, store_logo, country),
+            category:categories!inner (id, name, slug)
           `)
           .eq('status', 'active')
           .gt('rating', 0)

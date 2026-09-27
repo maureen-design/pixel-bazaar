@@ -21,7 +21,7 @@ interface Product {
   stock_quantity: number;
   status: string;
   images: string[];
-  categories: { name: string };
+  category: { name: string };
   created_at: string;
 }
 
@@ -58,7 +58,7 @@ export function VendorProducts() {
     try {
       const { data } = await supabase
         .from('products')
-        .select('*, categories(name)')
+        .select('*, category:categories(name)')
         .eq('vendor_id', vendor.id)
         .order('created_at', { ascending: false });
 
@@ -142,7 +142,7 @@ export function VendorProducts() {
     const headers = ['Name', 'Category', 'Price', 'Compare Price', 'Stock', 'Status'];
     const rows = filteredProducts.map(p => [
       p.name,
-      p.categories?.name || '',
+      p.category?.name || '',
       p.price,
       p.compare_price || '',
       p.stock_quantity,
@@ -370,7 +370,7 @@ export function VendorProducts() {
                   </div>
 
                   <p className="text-xs text-muted-foreground mb-3 line-clamp-1">
-                    {product.categories?.name || 'Uncategorized'}
+                    {product.category?.name || 'Uncategorized'}
                   </p>
 
                   <div className="flex items-center justify-between mb-3">

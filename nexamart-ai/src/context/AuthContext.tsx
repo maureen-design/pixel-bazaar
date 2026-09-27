@@ -44,12 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
         setProfile(profileData);
 
-        // Fetch vendor data by ownership (user_id = auth user). Mirrors the
-        // ownership-based RLS on products, so admins who own a store are included.
+        // Fetch vendor data by ownership. This is the public.get_my_vendor()
+        // RPC rather than a filtered `select *` on vendors: migration 0032
+        // revoked SELECT on phone / rejection_* / user_id for anon and
+        // authenticated, so the star expands to columns this session cannot
+        // read and the ownership predicate itself is no longer available to
+        // it. The definer moves that test server-side and returns the full
+        // own-row, private fields included. Mirrors the ownership-based RLS
+        // on products, so admins who own a store are included.
         const { data: vendorData } = await supabase
-          .from('vendors')
-          .select('*')
-          .eq('user_id', session.user.id)
+          .rpc('get_my_vendor')
           .maybeSingle();
         setVendor(vendorData);
       } else {
