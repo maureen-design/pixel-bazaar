@@ -70,14 +70,24 @@ export function AdminVendors() {
   const rejectVendor = async (id: string, reason?: string) => {
     const { error } = await supabase.rpc('reject_vendor', { target_vendor_id: id });
     if (error) { toast.error('Failed to reject'); return; }
-    // Update rejection count and timestamp.
+    // Record the reason and the timestamp.
     // rejection_reason / last_rejected_at moved off vendors to vendor_private in
     // migration 0034, so anon can hold table-level SELECT on vendors (which the
     // product embeds require) without being able to read moderation history.
-    await supabase.from('vendor_private').update({
-      rejection_reason: reason || null,
-      last_rejected_at: new Date().toISOString(),
-    }).eq('vendor_id', id);
+    // The error is checked rather than discarded: this write is the only record
+    // of why a vendor was turned down, and when it targeted a column that no
+    // longer existed it failed silently while the UI still reported success.
+    const { error: reasonError } = await supabase
+      .from('vendor_private')
+      .update({
+        rejection_reason: reason || null,
+        last_rejected_at: new Date().toISOString(),
+      })
+      .eq('vendor_id', id);
+
+    if (reasonError) {
+      console.error('Failed to record rejection reason:', reasonError);
+    }
     // Log the action
     await supabase.from('activity_logs').insert({
       user_id: user?.id || null,
@@ -85,6 +95,18 @@ export function AdminVendors() {
       action: 'vendor_reject',
       details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name, reason: reason || null },
     });
+
+    // The vendor is rejected either way: the RPC above already committed, and
+    // that is not something this handler can undo. But the reason they were
+    // given is missing, so do not claim success and do not email the applicant
+    // a reason that was never recorded. Returning here also keeps the two
+    // toasts from contradicting each other.
+    if (reasonError) {
+      toast.error('Vendor was rejected, but the reason was not saved');
+      fetchVendors();
+      return;
+    }
+
     toast.success('Vendor rejected');
     supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: id, action: 'rejected', reason: reason || null } }).catch(() => {});
     fetchVendors();

@@ -7,6 +7,10 @@ const PLACEHOLDER_IMAGE = 'https://placehold.co/400x400/1e293b/64748b?text=No+Im
 
 export interface SearchFilters {
   categoryId?: string;
+  // ?vendor=<uuid>. Backs the links FeaturedVendors.tsx already emits, and lets
+  // a store link straight to its own catalog. This is a direct column filter on
+  // products.vendor_id, so it ANDs with the text search like any other filter.
+  vendorId?: string;
   productType?: string;
   brand?: string;
   color?: string;
@@ -116,6 +120,7 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
 
   const {
     categoryId,
+    vendorId,
     productType,
     brand,
     color,
@@ -135,7 +140,12 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
     const safeMinPrice = typeof minPrice === 'number' && Number.isFinite(minPrice) && minPrice >= 0 ? minPrice : undefined;
     const safeMaxPrice = typeof maxPrice === 'number' && Number.isFinite(maxPrice) && maxPrice >= 0 ? maxPrice : undefined;
     const normalizedColor = typeof color === 'string' && color.trim() ? color.trim().toLowerCase() : undefined;
-    const hasFilters = !!(categoryId || productType || brand || normalizedColor || safeMinPrice !== undefined || safeMaxPrice !== undefined);
+    // vendorId belongs in this list, not just the query builder below. Line ~140
+    // short-circuits to an empty result set when there is neither a search term
+    // nor a filter, so omitting it here would make /search?vendor=<id> with no
+    // q return nothing at all - which is exactly the shape of every link in
+    // FeaturedVendors.tsx.
+    const hasFilters = !!(categoryId || vendorId || productType || brand || normalizedColor || safeMinPrice !== undefined || safeMaxPrice !== undefined);
 
     if (!hasSearchTerm && !hasFilters) {
       setData([]);
@@ -233,6 +243,10 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         query = query.eq('category_id', categoryId);
       }
 
+      if (vendorId) {
+        query = query.eq('vendor_id', vendorId);
+      }
+
       if (productType) {
         query = query.eq('product_type', productType);
       }
@@ -273,7 +287,13 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         // Retrieve up to 200 rows for scoring, then slice to page
         query = query.order('created_at', { ascending: false }).range(0, 199);
       } else {
-        query = query.range(offset, offset + limit - 1);
+        // 'newest' means created_at descending, and this branch has to say so
+        // explicitly. It is the branch taken by any filter-only search with no
+        // q - ?category= or ?vendor= - and it previously applied no order at
+        // all. .range() with no ORDER BY lets Postgres return rows in any order,
+        // so consecutive pages could repeat or skip products, and the page-2
+        // result would not be a stable slice of the same set as page 1.
+        query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
       }
 
       return query;
@@ -349,7 +369,7 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, categoryId, productType, brand, color, minPrice, maxPrice, sortBy, offset, limit]);
+  }, [searchTerm, categoryId, vendorId, productType, brand, color, minPrice, maxPrice, sortBy, offset, limit]);
 
   useEffect(() => {
     fetchResults();
