@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { AuthLayout } from '../../layouts/AuthLayout';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import { toast } from 'sonner';
 import { useSettings } from '../../hooks/useSettings';
 import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
@@ -85,14 +86,14 @@ export function Login() {
           error={errors.email}
           required
         />
-        <Input
+        <PasswordInput
           label="Password"
-          type="password"
           placeholder="••••••••"
           value={password}
-          onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })); }}
+          onChange={(value) => { setPassword(value); setErrors(prev => ({ ...prev, password: '' })); }}
           error={errors.password}
           required
+          autoComplete="current-password"
         />
         <div className="flex items-center justify-between">
           <Link to="/forgot-password" className="text-sm text-primary hover:text-primary/80">
