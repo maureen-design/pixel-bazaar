@@ -83,7 +83,7 @@ export function AdminDashboard() {
       if (currentMoney.error) {
         console.error('admin_financial_summary failed:', currentMoney.error);
         toast.error('Financial figures unavailable', {
-          description: 'Apply migration 0037 (and 0039) in Supabase, then reload.',
+          description: 'Apply migrations 0037, 0039 and 0040 in Supabase, then reload.',
         });
       }
 

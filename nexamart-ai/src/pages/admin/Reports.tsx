@@ -79,6 +79,7 @@ interface AnalyticsData {
   revenueByDay: { date: string; amount: number }[];
   ordersByDay: { date: string; count: number }[];
   topProducts: TopProduct[];
+  refundedInWindow: number;
 }
 
 export function AdminReports() {
@@ -89,6 +90,7 @@ export function AdminReports() {
     totalRevenue: 0,
     gmv: 0,
     refunded: 0,
+    refundedInWindow: 0,
     taxCollected: 0,
     shippingCollected: 0,
     vendorEarnings: 0,
@@ -131,6 +133,7 @@ export function AdminReports() {
           .select(`
             id,
             created_at,
+            paid_at,
             payment_status,
             refunded_at,
             order_items (
@@ -143,7 +146,16 @@ export function AdminReports() {
             )
           `)
           .in('payment_status', ['paid', 'refunded'])
-          .gte('created_at', startDate.toISOString()),
+          // Must mirror the coalesce(paid_at, created_at) basis the 0040
+          // reporting RPCs use, so top products agrees with the KPIs above.
+          // Filtering on created_at alone would drop an order that was placed
+          // before the window but paid inside it.
+          .or(
+            `paid_at.gte.${startDate.toISOString()}` +
+            `,paid_at.lt.${endDate.toISOString()}` +
+            `,and(paid_at.is.null,created_at.gte.${startDate.toISOString()}` +
+            `,created_at.lt.${endDate.toISOString()})`
+          ),
         supabase.from('profiles').select('id'),
         supabase.from('products').select('id'),
       ]);
@@ -151,7 +163,7 @@ export function AdminReports() {
       if (moneyResult.error) {
         console.error('admin_financial_summary failed:', moneyResult.error);
         toast.error('Financial figures unavailable', {
-          description: 'Apply migrations 0037 and 0039 in Supabase, then reload.',
+          description: 'Apply migrations 0037, 0039 and 0040 in Supabase, then reload.',
         });
       }
 
@@ -190,10 +202,21 @@ export function AdminReports() {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 8);
 
+      // refunded_amount from the summary RPC is attributed to the window its
+      // order was PAID in, which keeps each order self-consistent but is not
+      // the same as "cash refunded during this window". Surface both so the
+      // CSV cannot be misread as a cash-flow figure.
+      const refundsResult = await supabase.rpc('admin_refunds_in_window', {
+        p_from: startDate.toISOString(),
+        p_to: endDate.toISOString(),
+      });
+      const refundedInWindow = Number(refundsResult.data?.[0]?.amount ?? 0);
+
       setData({
         totalRevenue: Number(m?.net_platform_revenue ?? 0),
         gmv: Number(m?.gmv ?? 0),
         refunded: Number(m?.refunded_amount ?? 0),
+        refundedInWindow,
         taxCollected: Number(m?.tax_collected ?? 0),
         shippingCollected: Number(m?.shipping_collected ?? 0),
         vendorEarnings: Number(m?.vendor_earnings_paid ?? 0),
@@ -219,7 +242,8 @@ export function AdminReports() {
       `Vendor Earnings,${data.vendorEarnings}`,
       `Tax Collected,${data.taxCollected}`,
       `Shipping Collected,${data.shippingCollected}`,
-      `Refunded,${data.refunded}`,
+      `Refunded (orders paid in window),${data.refunded}`,
+      `Refunded (cash out in window),${data.refundedInWindow}`,
       `Paid Orders,${data.totalOrders}`,
       `Total Users,${data.totalUsers}`,
       `Total Products,${data.totalProducts}`,

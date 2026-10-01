@@ -44,12 +44,28 @@ select '002 authenticated can execute' as check,
        ) as ok,
        'the dashboards need EXECUTE or they render zero' as detail;
 
+-- PUBLIC is a pseudo-role with no OID, so has_function_privilege('public',...)
+-- is not usable here. aclexplode exposes PUBLIC grants as grantee = 0, and
+-- acldefault() supplies the default ACL when proacl IS NULL.
 select '003 anon and public cannot execute' as check,
        (
          not has_function_privilege('anon',   'public.admin_daily_commission(timestamptz,timestamptz)',  'EXECUTE')
      and not has_function_privilege('anon',   'public.vendor_financial_summary_range(uuid,timestamptz,timestamptz)', 'EXECUTE')
      and not has_function_privilege('anon',   'public.vendor_daily_earnings(uuid,timestamptz,timestamptz)', 'EXECUTE')
-     and not has_function_privilege('public', 'public.admin_daily_commission(timestamptz,timestamptz)',  'EXECUTE')
+     and not exists (
+           select 1
+             from pg_proc p
+             join pg_namespace n on n.oid = p.pronamespace
+             cross join lateral aclexplode(
+               coalesce(p.proacl, acldefault('f', p.proowner))
+             ) acl
+            where n.nspname = 'public'
+              and p.proname in ('admin_daily_commission',
+                                'vendor_financial_summary_range',
+                                'vendor_daily_earnings')
+              and acl.grantee = 0
+              and acl.privilege_type = 'EXECUTE'
+         )
        ) as ok,
        'commission by day is platform margin data; it must not be public' as detail;
 
