@@ -116,6 +116,8 @@ export function Signup() {
           value={email}
           onChange={(e) => { setEmail(e.target.value); clearFieldError('email'); }}
           autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           error={errors.email}
           required
         />
@@ -125,7 +127,11 @@ export function Signup() {
           onChange={(value) => { setPassword(value); clearFieldError('password'); }}
           placeholder="Create a password"
           autoComplete="new-password"
-          error={errors.password}
+          error={errors.password || (
+            password && !meetsAllRequirements(password)
+              ? 'Password does not meet all requirements'
+              : undefined
+          )}
           required
         />
         <PasswordInput
@@ -134,10 +140,14 @@ export function Signup() {
           onChange={(value) => { setConfirmPassword(value); clearFieldError('confirmPassword'); }}
           placeholder="Re-enter your password"
           autoComplete="new-password"
-          error={errors.confirmPassword}
+          error={errors.confirmPassword || (
+            confirmPassword && confirmPassword !== password
+              ? 'Passwords do not match'
+              : undefined
+          )}
           required
         />
-        <PasswordRequirements value={password} />
+        {password && <PasswordRequirements value={password} />}
         {isCheckoutIntent && (
           <p className="text-xs text-muted-foreground">
             Your cart will be waiting for you — create your account and we'll continue right to

@@ -5,7 +5,10 @@ import { AuthLayout } from '../../layouts/AuthLayout';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
-import { meetsAllRequirements } from '../../utils/passwordValidation';
+import {
+  meetsAllRequirements,
+  firstUnmetRequirement,
+} from '../../utils/passwordValidation';
 import { PasswordInput } from '../../components/ui/PasswordInput';
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements';
 
@@ -38,6 +41,10 @@ export function ResetPassword() {
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
   const successRef = useRef(false);
+
+  // The account's current password is never available on this page, so the
+  // "must differ from your previous password" rule cannot be checked here.
+  // Supabase enforces it server side and friendlyResetError translates it.
 
   useEffect(() => {
     let mounted = true;
@@ -73,7 +80,10 @@ export function ResetPassword() {
     if (!newPassword) {
       errs.newPassword = 'Please enter a new password';
     } else if (!meetsAllRequirements(newPassword)) {
-      errs.newPassword = 'Your password does not meet all the requirements below';
+      const unmet = firstUnmetRequirement(newPassword);
+      errs.newPassword = unmet
+        ? `Missing: ${unmet.charAt(0).toLowerCase()}${unmet.slice(1)}`
+        : 'Your password does not meet all the requirements below';
     }
     if (!confirmPassword) {
       errs.confirmPassword = 'Please confirm your new password';
@@ -176,19 +186,32 @@ export function ResetPassword() {
           'New Password',
           newPassword,
           (value) => { setNewPassword(value); setErrors((prev) => ({ ...prev, newPassword: '' })); },
-          errors.newPassword
+          errors.newPassword || (
+            newPassword && !meetsAllRequirements(newPassword)
+              ? 'Password does not meet all requirements'
+              : undefined
+          )
         )}
 
         {passwordField(
           'Confirm Password',
           confirmPassword,
           (value) => { setConfirmPassword(value); setErrors((prev) => ({ ...prev, confirmPassword: '' })); },
-          errors.confirmPassword
+          errors.confirmPassword || (
+            confirmPassword && confirmPassword !== newPassword
+              ? 'Passwords do not match'
+              : undefined
+          )
         )}
 
         <PasswordRequirements value={newPassword} />
 
-        <Button type="submit" className="w-full" loading={loading}>
+        <Button
+          type="submit"
+          className="w-full"
+          loading={loading}
+          disabled={!meetsAllRequirements(newPassword) || newPassword !== confirmPassword}
+        >
           Reset Password
         </Button>
         <p className="text-center text-sm text-muted-foreground">

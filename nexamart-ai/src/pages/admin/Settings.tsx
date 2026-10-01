@@ -3,6 +3,13 @@ import { Save, Settings as SettingsIcon, Plus, Trash2, Info, Lock } from 'lucide
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
+import { PasswordInput } from '../../components/ui/PasswordInput';
+import { PasswordRequirements } from '../../components/ui/PasswordRequirements';
+import {
+  meetsAllRequirements,
+  firstUnmetRequirement,
+  isSameAsCurrent,
+} from '../../utils/passwordValidation';
 import { toast } from 'sonner';
 import { getSettings, updateSettings, invalidateSettings, type PlatformSettings } from '../../lib/settings';
 import { supabase } from '../../lib/supabaseClient';
@@ -230,12 +237,19 @@ export function AdminSettings() {
       toast.error('Please fill in all password fields');
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error('New password must be at least 6 characters');
-      return;
-    }
     if (newPassword !== confirmPassword) {
       toast.error('New passwords do not match');
+      return;
+    }
+    // Same rule as signup. This page previously accepted any 6 character
+    // password, which let an admin downgrade a strong password.
+    if (!meetsAllRequirements(newPassword)) {
+      const unmet = firstUnmetRequirement(newPassword);
+      toast.error(`Password must meet all requirements${unmet ? `: ${unmet.toLowerCase()}` : ''}`);
+      return;
+    }
+    if (isSameAsCurrent(newPassword, currentPassword)) {
+      toast.error('Your new password must be different from your current password');
       return;
     }
     setChangingPw(true);
@@ -474,30 +488,49 @@ export function AdminSettings() {
           <h2 className="text-xl font-semibold">Account Security</h2>
         </div>
         <div className="space-y-4">
-          <Input
+          <PasswordInput
             label="Current Password"
-            type="password"
             value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
+            onChange={setCurrentPassword}
             placeholder="Enter your current password"
+            autoComplete="current-password"
           />
-          <Input
+          <PasswordInput
             label="New Password"
-            type="password"
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="At least 6 characters"
-            error={newPassword.length > 0 && newPassword.length < 6 ? 'Must be at least 6 characters' : undefined}
+            onChange={setNewPassword}
+            placeholder="Enter a new password"
+            autoComplete="new-password"
+            error={
+              newPassword && !meetsAllRequirements(newPassword)
+                ? 'Password does not meet all requirements below'
+                : undefined
+            }
           />
-          <Input
+          <PasswordInput
             label="Confirm New Password"
-            type="password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={setConfirmPassword}
             placeholder="Re-enter new password"
-            error={confirmPassword.length > 0 && confirmPassword !== newPassword ? 'Passwords do not match' : undefined}
+            autoComplete="new-password"
+            error={
+              confirmPassword && confirmPassword !== newPassword
+                ? 'Passwords do not match'
+                : undefined
+            }
           />
-          <Button onClick={handleChangePassword} disabled={changingPw || !currentPassword || !newPassword || !confirmPassword} className="gap-2">
+          {newPassword && <PasswordRequirements value={newPassword} compact />}
+          <Button
+            onClick={handleChangePassword}
+            disabled={
+              changingPw ||
+              !currentPassword ||
+              !newPassword ||
+              !confirmPassword ||
+              !meetsAllRequirements(newPassword)
+            }
+            className="gap-2"
+          >
             <Lock className="w-4 h-4" /> {changingPw ? 'Changing...' : 'Change Password'}
           </Button>
         </div>

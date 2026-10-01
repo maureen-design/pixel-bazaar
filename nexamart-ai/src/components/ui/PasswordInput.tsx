@@ -10,8 +10,16 @@ interface PasswordInputProps {
   error?: string;
   autoComplete?: string;
   required?: boolean;
+  hint?: string;
 }
 
+/**
+ * Password field with a reveal toggle.
+ *
+ * The toggle is a real <button type="button"> so it never submits the form,
+ * and it carries aria-pressed plus a label that states the action, so screen
+ * reader users know whether the password is currently visible.
+ */
 export function PasswordInput({
   label,
   value,
@@ -20,8 +28,14 @@ export function PasswordInput({
   error,
   autoComplete = 'new-password',
   required,
+  hint,
 }: PasswordInputProps) {
   const [show, setShow] = useState(false);
+
+  // The toggle is positioned over the input, so its offset depends on whether
+  // a label and an error message are present. Hard-coded 38px matched only the
+  // label-present, no-error case and drifted elsewhere.
+  const toggleTop = label ? (error ? 'top-[76px]' : 'top-[38px]') : (error ? 'top-[38px]' : 'top-0');
 
   return (
     <div className="relative">
@@ -34,14 +48,16 @@ export function PasswordInput({
         autoComplete={autoComplete}
         className="pr-10"
         error={error}
+        hint={hint}
         required={required}
       />
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        aria-label={show ? `Hide ${label || 'password'}` : `Show ${label || 'password'}`}
         aria-pressed={show}
-        className="absolute right-2 top-[38px] p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+        title={show ? 'Hide password' : 'Show password'}
+        className={`absolute right-1 ${toggleTop} p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors`}
       >
         {show ? (
           <EyeOff aria-hidden="true" className="w-4 h-4" />

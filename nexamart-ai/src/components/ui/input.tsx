@@ -6,12 +6,16 @@ import { cn } from "@/lib/utils"
 export interface InputProps extends React.ComponentProps<"input"> {
   label?: string
   error?: string
+  /** Non-error helper text. Linked via aria-describedby alongside error. */
+  hint?: string
 }
 
-function Input({ className, type, label, error, ...props }: InputProps) {
+function Input({ className, type, label, error, hint, ...props }: InputProps) {
   const generatedId = React.useId()
   const inputId = props.id || generatedId
   const errorId = error ? `${inputId}-error` : undefined
+  const hintId = hint ? `${inputId}-hint` : undefined
+  const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined
 
   return (
     <div className="space-y-1.5">
@@ -30,8 +34,13 @@ function Input({ className, type, label, error, ...props }: InputProps) {
           className
         )}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={describedBy}
       />
+      {hint && !error && (
+        <p id={hintId} className="text-muted-foreground text-sm mt-1">
+          {hint}
+        </p>
+      )}
       {error && (
         <p id={errorId} role="alert" className="text-destructive text-sm mt-1">
           {error}

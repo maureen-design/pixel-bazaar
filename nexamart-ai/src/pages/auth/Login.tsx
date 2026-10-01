@@ -83,6 +83,9 @@ export function Login() {
           placeholder="you@example.com"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setErrors(prev => ({ ...prev, email: '' })); }}
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           error={errors.email}
           required
         />

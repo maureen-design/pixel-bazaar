@@ -57,6 +57,9 @@ export function ForgotPassword() {
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           required
         />
         <Button type="submit" className="w-full" loading={loading}>

@@ -7,6 +7,13 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
+import { PasswordInput } from '../components/ui/PasswordInput';
+import { PasswordRequirements } from '../components/ui/PasswordRequirements';
+import {
+  meetsAllRequirements,
+  firstUnmetRequirement,
+  isSameAsCurrent,
+} from '../utils/passwordValidation';
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -70,8 +77,16 @@ export function Settings() {
       toast.error('Passwords do not match');
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    // Enforced the same rule as signup. This page previously accepted any 6
+    // character password, which let a user downgrade a strong password set
+    // during registration.
+    if (!meetsAllRequirements(newPassword)) {
+      const unmet = firstUnmetRequirement(newPassword);
+      toast.error(`Password must meet all requirements${unmet ? `: ${unmet.toLowerCase()}` : ''}`);
+      return;
+    }
+    if (isSameAsCurrent(newPassword, currentPassword)) {
+      toast.error('Your new password must be different from your current password');
       return;
     }
     setChangingPw(true);
@@ -94,7 +109,14 @@ export function Settings() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update password');
+      const lower = (error?.message || '').toLowerCase();
+      if (lower.includes('same as') || lower.includes('previous')) {
+        toast.error('Your new password must be different from your current password');
+      } else if (lower.includes('at least') || lower.includes('characters')) {
+        toast.error('Password does not meet the requirements listed below');
+      } else {
+        toast.error(error.message || 'Failed to update password');
+      }
     } finally {
       setChangingPw(false);
     }
@@ -198,40 +220,47 @@ export function Settings() {
               <CardTitle>Change Password</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
-                  className="bg-muted border-border"
-                />
-              </div>
-              <div>
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password"
-                  className="bg-muted border-border"
-                />
-              </div>
-              <div>
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                  className="bg-muted border-border"
-                />
-              </div>
-              <Button onClick={handlePasswordChange} disabled={changingPw || !currentPassword || !newPassword}>
+              <PasswordInput
+                label="Current Password"
+                value={currentPassword}
+                onChange={setCurrentPassword}
+                placeholder="Enter current password"
+                autoComplete="current-password"
+              />
+              <PasswordInput
+                label="New Password"
+                value={newPassword}
+                onChange={setNewPassword}
+                placeholder="Enter new password"
+                autoComplete="new-password"
+                error={
+                  newPassword && !meetsAllRequirements(newPassword)
+                    ? 'Password does not meet all requirements below'
+                    : undefined
+                }
+              />
+              <PasswordInput
+                label="Confirm Password"
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                placeholder="Confirm new password"
+                autoComplete="new-password"
+                error={
+                  confirmPassword && confirmPassword !== newPassword
+                    ? 'Passwords do not match'
+                    : undefined
+                }
+              />
+              {newPassword && <PasswordRequirements value={newPassword} compact />}
+              <Button
+                onClick={handlePasswordChange}
+                disabled={
+                  changingPw ||
+                  !currentPassword ||
+                  !newPassword ||
+                  !meetsAllRequirements(newPassword)
+                }
+              >
                 {changingPw ? 'Updating...' : 'Update Password'}
               </Button>
             </CardContent>
