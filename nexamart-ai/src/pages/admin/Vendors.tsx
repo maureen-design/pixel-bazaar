@@ -315,7 +315,7 @@ export function AdminVendors() {
                     <th className="text-left p-4 text-muted-foreground font-medium">Email</th>
                     <th className="text-left p-4 text-muted-foreground font-medium">Status</th>
                     <th className="text-left p-4 text-muted-foreground font-medium">Rating</th>
-                    <th className="text-left p-4 text-muted-foreground font-medium">Total Sales</th>
+                    <th className="text-left p-4 text-muted-foreground font-medium">Paid Orders</th>
                     <th className="text-left p-4 text-muted-foreground font-medium">Joined</th>
                     <th className="text-right p-4 text-muted-foreground font-medium">Actions</th>
                   </tr>
@@ -407,7 +407,7 @@ export function AdminVendors() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Owner:</span> <span className="text-foreground ml-2">{selectedVendor.applicant_full_name}</span></div>
                 <div><span className="text-muted-foreground">Rating:</span> <span className="text-foreground ml-2">{selectedVendor.rating > 0 ? Number(selectedVendor.rating).toFixed(1) + ' / 5' : 'No ratings yet'}</span></div>
-                <div><span className="text-muted-foreground">Total Sales:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales > 0 ? selectedVendor.total_sales.toLocaleString() : 'N/A'}</span></div>
+                <div><span className="text-muted-foreground">Paid Orders:</span> <span className="text-foreground ml-2">{selectedVendor.total_sales > 0 ? `${selectedVendor.total_sales.toLocaleString()} settled` : 'N/A'}</span></div>
                 <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedVendor.is_verified ? 'default' : 'secondary'} className="ml-2">{selectedVendor.is_verified ? 'Approved' : 'Pending'}</Badge></div>
                 <div><span className="text-muted-foreground">Joined:</span> <span className="text-foreground ml-2">{formatDate(selectedVendor.created_at)}</span></div>
               </div>

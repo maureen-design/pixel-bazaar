@@ -359,10 +359,10 @@ export function VendorSettings() {
             <p className="font-medium">{vendor?.profiles?.email || '—'}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Total Sales</p>
+            <p className="text-muted-foreground">Paid Orders</p>
             <p className="font-medium">
               {vendor?.total_sales > 0
-                ? `${vendor.total_sales.toLocaleString()} orders`
+                ? `${vendor.total_sales.toLocaleString()} settled`
                 : <span className="text-muted-foreground">Not yet tracked</span>}
             </p>
           </div>

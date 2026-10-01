@@ -48,8 +48,8 @@ function StatCardSkeleton() {
 }
 
 export function AdminDashboard() {
-  const [stats, setStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0, pending_vendors: 0, low_stock: 0, out_of_stock: 0, status_breakdown: [] as { status: string; count: number }[] });
-  const [prevStats, setPrevStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0 });
+  const [stats, setStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0, gmv: 0, refunded: 0, pending_vendors: 0, low_stock: 0, out_of_stock: 0, status_breakdown: [] as { status: string; count: number }[] });
+  const [prevStats, setPrevStats] = useState({ total_users: 0, total_vendors: 0, total_products: 0, total_orders: 0, total_revenue: 0, gmv: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [pendingVendors, setPendingVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,18 +68,41 @@ export function AdminDashboard() {
       const { data: vendors } = await supabase.from('vendors').select('id, is_verified');
       const { data: products } = await supabase.from('products').select('id, stock_quantity, status, price');
 
-      const [currentOrdersResult, prevOrdersResult] = await Promise.all([
-        supabase.from('orders').select('id, total_amount, status, created_at').gte('created_at', thirtyDaysAgo.toISOString()),
-        supabase.from('orders').select('id, total_amount, created_at').gte('created_at', sixtyDaysAgo.toISOString()).lt('created_at', thirtyDaysAgo.toISOString()),
+      // Money comes from the database, never from sum(total_amount) in the
+      // client. 0037 split every order into commission and vendor earnings and
+      // tax/shipping pass-through, so gross order totals no longer describe
+      // money the marketplace holds. admin_financial_summary is admin-gated and
+      // returns net commission after refunds.
+      const [currentMoney, prevMoney] = await Promise.all([
+        supabase.rpc('admin_financial_summary', { p_from: thirtyDaysAgo.toISOString(), p_to: now.toISOString() }),
+        supabase.rpc('admin_financial_summary', { p_from: sixtyDaysAgo.toISOString(), p_to: thirtyDaysAgo.toISOString() }),
       ]);
 
+      // A failed RPC must not silently render as KES 0 revenue, which would be
+      // worse than the old bug: it looks like a real, quiet month.
+      if (currentMoney.error) {
+        console.error('admin_financial_summary failed:', currentMoney.error);
+        toast.error('Financial figures unavailable', {
+          description: 'Apply migration 0037 (and 0039) in Supabase, then reload.',
+        });
+      }
+
+      const cur = currentMoney.data?.[0];
+      const prv = prevMoney.data?.[0];
+
+      // Order counts and the status breakdown are operational, not financial, so
+      // they still come straight from the orders table.
+      const { data: currentOrders } = await supabase
+        .from('orders')
+        .select('id, status, created_at')
+        .gte('created_at', thirtyDaysAgo.toISOString());
+
       const productList = products || [];
-      const currentOrders = currentOrdersResult.data || [];
-      const prevOrders = prevOrdersResult.data || [];
+      const currentOrdersList = currentOrders || [];
 
       // Calculate status breakdown
       const statusCounts: Record<string, number> = {};
-      currentOrders.forEach((o: any) => {
+      currentOrdersList.forEach((o: any) => {
         statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
       });
       const status_breakdown = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
@@ -88,8 +111,10 @@ export function AdminDashboard() {
         total_users: users?.length || 0,
         total_vendors: vendors?.length || 0,
         total_products: productList.length,
-        total_orders: currentOrders.length,
-        total_revenue: currentOrders.reduce((s: number, o: any) => s + (o.total_amount || 0), 0),
+        total_orders: Number(cur?.orders_paid ?? 0),
+        total_revenue: Number(cur?.net_platform_revenue ?? 0),
+        gmv: Number(cur?.gmv ?? 0),
+        refunded: Number(cur?.refunded_amount ?? 0),
         pending_vendors: vendors?.filter((v: any) => !v.is_verified).length || 0,
         low_stock: productList.filter((p: any) => p.stock_quantity > 0 && p.stock_quantity <= 5 && p.status !== 'out_of_stock').length,
         out_of_stock: productList.filter((p: any) => p.stock_quantity === 0 || p.status === 'out_of_stock').length,
@@ -100,8 +125,9 @@ export function AdminDashboard() {
         total_users: users?.length || 0,
         total_vendors: vendors?.length || 0,
         total_products: productList.length,
-        total_orders: prevOrders.length,
-        total_revenue: prevOrders.reduce((s: number, o: any) => s + (o.total_amount || 0), 0),
+        total_orders: Number(prv?.orders_paid ?? 0),
+        total_revenue: Number(prv?.net_platform_revenue ?? 0),
+        gmv: Number(prv?.gmv ?? 0),
       });
 
       const { data: recent } = await supabase
@@ -156,8 +182,8 @@ export function AdminDashboard() {
           <Skeleton className="h-9 w-48 mb-2" />
           <Skeleton className="h-4 w-64" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-          {[1, 2, 3, 4, 5].map((i) => <StatCardSkeleton key={i} />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => <StatCardSkeleton key={i} />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
@@ -174,8 +200,11 @@ export function AdminDashboard() {
     { icon: Users, label: 'Total Users', value: stats.total_users, color: 'blue', delay: 0.1, prev: prevStats.total_users },
     { icon: Store, label: 'Total Vendors', value: stats.total_vendors, color: 'green', delay: 0.2, prev: prevStats.total_vendors },
     { icon: Package, label: 'Total Products', value: stats.total_products, color: 'purple', delay: 0.3, prev: prevStats.total_products },
-    { icon: Package, label: '30-Day Orders', value: stats.total_orders, color: 'yellow', delay: 0.4, prev: prevStats.total_orders },
-    { icon: DollarSign, label: '30-Day Revenue', value: formatPrice(stats.total_revenue), color: 'emerald', delay: 0.5, prev: prevStats.total_revenue },
+    { icon: Package, label: '30-Day Paid Orders', value: stats.total_orders, color: 'yellow', delay: 0.4, prev: prevStats.total_orders },
+    // net_platform_revenue is commission after refunds, not order value. Label
+    // it as commission so nobody reads it as gross sales.
+    { icon: DollarSign, label: '30-Day Commission', value: formatPrice(stats.total_revenue), color: 'emerald', delay: 0.5, prev: prevStats.total_revenue },
+    { icon: TrendingUp, label: '30-Day GMV (paid)', value: formatPrice(stats.gmv), color: 'blue', delay: 0.6, prev: prevStats.gmv },
   ];
 
   return (
@@ -185,7 +214,7 @@ export function AdminDashboard() {
         <p className="text-muted-foreground">Overview of your marketplace (last 30 days)</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {statCards.map(({ icon: Icon, label, value, color, delay, prev }) => {
           const colors = statColorMap[color];
           const pct = formatPercent(typeof value === 'number' ? value : 0, prev);

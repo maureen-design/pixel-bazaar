@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { formatPrice } from '../../config/pricing';
 
@@ -78,19 +79,42 @@ export function VendorAnalytics() {
     setLoading(true);
     try {
       const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       const prevStartDate = new Date(startDate);
       prevStartDate.setDate(prevStartDate.getDate() - days);
 
-      const [currentOrdersResult, prevOrdersResult, productsResult] = await Promise.all([
+      // This page had two separate money bugs:
+      //   1. it summed total_amount, which includes tax and shipping the vendor
+      //      never receives, and
+      //   2. it filtered on status = 'delivered', a FULFILMENT state, and used
+      //      it as a proxy for payment. A delivered-but-unpaid order counted as
+      //      earnings, and a paid-but-unshipped order did not.
+      // Earnings now come from the database, bucketed on paid_at.
+      const [currentMoney, prevMoney, dailyResult, ordersResult, productsResult] = await Promise.all([
+        supabase.rpc('vendor_financial_summary_range', {
+          p_vendor_id: vendor.id,
+          p_from: startDate.toISOString(),
+          p_to: endDate.toISOString(),
+        }),
+        supabase.rpc('vendor_financial_summary_range', {
+          p_vendor_id: vendor.id,
+          p_from: prevStartDate.toISOString(),
+          p_to: startDate.toISOString(),
+        }),
+        supabase.rpc('vendor_daily_earnings', {
+          p_vendor_id: vendor.id,
+          p_from: startDate.toISOString(),
+          p_to: endDate.toISOString(),
+        }),
         supabase
           .from('orders')
           .select(`
             id,
-            total_amount,
-            created_at,
-            status,
+            vendor_earnings,
+            paid_at,
+            refunded_at,
             order_items!inner (
               quantity,
               product_price,
@@ -102,16 +126,10 @@ export function VendorAnalytics() {
             )
           `)
           .eq('vendor_id', vendor.id)
-          .gte('created_at', startDate.toISOString())
-          .eq('status', 'delivered')
+          .in('payment_status', ['paid', 'refunded'])
+          .is('refunded_at', null)
+          .gte('paid_at', startDate.toISOString())
           .eq('order_items.products.vendor_id', vendor.id),
-        supabase
-          .from('orders')
-          .select('id, total_amount, created_at')
-          .eq('vendor_id', vendor.id)
-          .gte('created_at', prevStartDate.toISOString())
-          .lt('created_at', startDate.toISOString())
-          .eq('status', 'delivered'),
         supabase
           .from('products')
           .select('id, name')
@@ -119,34 +137,37 @@ export function VendorAnalytics() {
           .eq('status', 'active'),
       ]);
 
-      const orders = currentOrdersResult.data || [];
-      const prevOrders = prevOrdersResult.data || [];
+      if (currentMoney.error) {
+        console.error('vendor_financial_summary_range failed:', currentMoney.error);
+        toast.error('Earnings unavailable', {
+          description: 'Apply migrations 0037 and 0039 in Supabase, then reload.',
+        });
+      }
 
-      const totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const previousRevenue = prevOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const totalOrders = orders.length;
-      const previousOrders = prevOrders.length;
+      const cur = currentMoney.data?.[0];
+      const prv = prevMoney.data?.[0];
+      const orders = ordersResult.data || [];
+
+      const totalRevenue = Number(cur?.earnings ?? 0);
+      const previousRevenue = Number(prv?.earnings ?? 0);
+      const totalOrders = Number(cur?.orders ?? 0);
+      const previousOrders = Number(prv?.orders ?? 0);
       const totalProducts = productsResult.data?.length || 0;
       const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-      // Build day-by-day data
-      const revenueByDay: { date: string; amount: number }[] = [];
-      const ordersByDay: { date: string; count: number }[] = [];
+      // Zero-filled by the RPC, so quiet days are real zeroes.
+      const revenueByDay: { date: string; amount: number }[] = (dailyResult.data || []).map((d: any) => ({
+        date: new Date(d.day).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+        amount: Number(d.earnings || 0),
+      }));
+      const ordersByDay: { date: string; count: number }[] = (dailyResult.data || []).map((d: any) => ({
+        date: new Date(d.day).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+        count: Number(d.orders || 0),
+      }));
 
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        const dayOrders = orders.filter(order => order.created_at.startsWith(dateStr));
-        const dayRevenue = dayOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-
-        const label = date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-        revenueByDay.push({ date: label, amount: dayRevenue });
-        ordersByDay.push({ date: label, count: dayOrders.length });
-      }
-
-      // Product performance
+      // Product performance. Ranked on merchandise sold (quantity x list price),
+      // not on vendor earnings, because commission is proportional across every
+      // product so it carries no ranking signal.
       const productSales = new Map<string, { quantity: number; revenue: number; image?: string }>();
       const items = orders.flatMap(order => (order as any).order_items || []);
       items.forEach(item => {
@@ -236,12 +257,13 @@ export function VendorAnalytics() {
           <Card className="p-5 bg-card border-border">
             <div className="flex items-center gap-3 mb-2">
               <DollarSign className="w-4 h-4 text-success" />
-              <span className="text-xs text-muted-foreground">Total Revenue</span>
+              <span className="text-xs text-muted-foreground">Total Earnings</span>
             </div>
             <p className="text-xl font-bold">{formatPrice(data.totalRevenue)}</p>
             <p className="text-xs text-muted-foreground mt-1">
               vs prev. period: <span className={`font-medium ${data.totalRevenue >= data.previousRevenue ? 'text-success' : 'text-destructive'}`}>{formatPercent(data.totalRevenue, data.previousRevenue)}</span>
             </p>
+            <p className="text-xs text-muted-foreground mt-1">Paid orders only, after platform commission.</p>
           </Card>
         </motion.div>
 
@@ -249,7 +271,7 @@ export function VendorAnalytics() {
           <Card className="p-5 bg-card border-border">
             <div className="flex items-center gap-3 mb-2">
               <ShoppingCart className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Total Orders</span>
+              <span className="text-xs text-muted-foreground">Paid Orders</span>
             </div>
             <p className="text-xl font-bold">{data.totalOrders}</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -285,8 +307,9 @@ export function VendorAnalytics() {
           <Card className="p-6 bg-card border-border">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-muted-foreground" />
-              Revenue Over Time
+              Earnings Over Time
             </h3>
+            <p className="text-xs text-muted-foreground -mt-2 mb-4">Dated by when you were paid, not when the order was placed.</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.revenueByDay} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>

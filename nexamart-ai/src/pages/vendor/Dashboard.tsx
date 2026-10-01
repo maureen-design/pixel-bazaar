@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, ShoppingCart, DollarSign, Clock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Package, ShoppingCart, DollarSign, Clock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, ArrowUpRight, Wallet } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 import { formatPrice } from '../../config/pricing';
 
 interface DashboardStats {
@@ -15,6 +16,9 @@ interface DashboardStats {
   pending_orders: number;
   previous_revenue: number;
   previous_orders: number;
+  outstanding_balance: number;
+  lifetime_earnings: number;
+  total_paid_out: number;
   low_stock_products: { id: string; name: string; stock_quantity: number }[];
   status_breakdown: { status: string; count: number }[];
 }
@@ -43,6 +47,9 @@ export function VendorDashboard() {
     pending_orders: 0,
     previous_revenue: 0,
     previous_orders: 0,
+    outstanding_balance: 0,
+    lifetime_earnings: 0,
+    total_paid_out: 0,
     low_stock_products: [],
     status_breakdown: [],
   });
@@ -58,36 +65,62 @@ export function VendorDashboard() {
 
   const fetchDashboardData = async () => {
     try {
+      const now = new Date();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const sixtyDaysAgo = new Date();
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-      const [productsResult, currentOrdersResult, prevOrdersResult, pendingResult, lowStockResult] = await Promise.all([
+      // Earnings come from the database. The old code summed orders.total_amount,
+      // which was wrong twice over: it counted unpaid and refunded orders as
+      // revenue, and total_amount includes tax and shipping that the vendor
+      // never receives. 0037 stored vendor_earnings per order (merchandise minus
+      // platform commission) and 0039 exposes it range-filtered on paid_at.
+      const [productsResult, currentMoney, prevMoney, lifetimeMoney, dailyResult, pendingResult, lowStockResult] = await Promise.all([
         supabase.from('products').select('id').eq('vendor_id', vendor.id),
-        supabase.from('orders').select('id, total_amount, status').eq('vendor_id', vendor.id).gte('created_at', thirtyDaysAgo.toISOString()),
-        supabase.from('orders').select('id, total_amount').eq('vendor_id', vendor.id).gte('created_at', sixtyDaysAgo.toISOString()).lt('created_at', thirtyDaysAgo.toISOString()),
+        supabase.rpc('vendor_financial_summary_range', { p_vendor_id: vendor.id, p_from: thirtyDaysAgo.toISOString(), p_to: now.toISOString() }),
+        supabase.rpc('vendor_financial_summary_range', { p_vendor_id: vendor.id, p_from: sixtyDaysAgo.toISOString(), p_to: thirtyDaysAgo.toISOString() }),
+        supabase.rpc('vendor_financial_summary', { p_vendor_id: vendor.id }),
+        supabase.rpc('vendor_daily_earnings', { p_vendor_id: vendor.id, p_from: thirtyDaysAgo.toISOString(), p_to: now.toISOString() }),
         supabase.from('orders').select('id').eq('vendor_id', vendor.id).eq('status', 'pending'),
         supabase.from('products').select('id, name, stock_quantity').eq('vendor_id', vendor.id).lte('stock_quantity', 5).eq('status', 'active'),
       ]);
 
-      const currentRevenue = currentOrdersResult.data?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
-      const prevRevenue = prevOrdersResult.data?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+      if (currentMoney.error) {
+        console.error('vendor_financial_summary_range failed:', currentMoney.error);
+        toast.error('Earnings unavailable', {
+          description: 'Apply migrations 0037 and 0039 in Supabase, then reload.',
+        });
+      }
+
+      const cur = currentMoney.data?.[0];
+      const prv = prevMoney.data?.[0];
+      const lifetime = lifetimeMoney.data?.[0];
+
+      // Operational counts still come from the orders table.
+      const { data: currentOrders } = await supabase
+        .from('orders')
+        .select('id, status')
+        .eq('vendor_id', vendor.id)
+        .gte('created_at', thirtyDaysAgo.toISOString());
 
       // Calculate status breakdown from current orders
       const statusCounts: Record<string, number> = {};
-      currentOrdersResult.data?.forEach((o: any) => {
+      currentOrders?.forEach((o: any) => {
         statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
       });
       const status_breakdown = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
 
       setStats({
         total_products: productsResult.data?.length || 0,
-        total_orders: currentOrdersResult.data?.length || 0,
-        total_revenue: currentRevenue,
+        total_orders: currentOrders?.length || 0,
+        total_revenue: Number(cur?.earnings ?? 0),
         pending_orders: pendingResult.data?.length || 0,
-        previous_revenue: prevRevenue,
-        previous_orders: prevOrdersResult.data?.length || 0,
+        previous_revenue: Number(prv?.earnings ?? 0),
+        previous_orders: Number(prv?.orders ?? 0),
+        outstanding_balance: Number(lifetime?.outstanding ?? 0),
+        lifetime_earnings: Number(lifetime?.total_earnings ?? 0),
+        total_paid_out: Number(lifetime?.total_paid_out ?? 0),
         low_stock_products: lowStockResult.data || [],
         status_breakdown,
       });
@@ -108,34 +141,15 @@ export function VendorDashboard() {
 
       setRecentOrders(recent || []);
 
-      const thirtyDaysStart = new Date();
-      thirtyDaysStart.setDate(thirtyDaysStart.getDate() - 29);
-      thirtyDaysStart.setHours(0, 0, 0, 0);
-
-      const { data: thirtyDayOrders } = await supabase
-        .from('orders')
-        .select('total_amount, created_at')
-        .eq('vendor_id', vendor.id)
-        .gte('created_at', thirtyDaysStart.toISOString());
-
-      const dailyMap: Record<string, { revenue: number; orders: number }> = {};
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const key = date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-        dailyMap[key] = { revenue: 0, orders: 0 };
-      }
-
-      thirtyDayOrders?.forEach((o) => {
-        const d = new Date(o.created_at);
-        const key = d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-        if (dailyMap[key]) {
-          dailyMap[key].revenue += o.total_amount || 0;
-          dailyMap[key].orders += 1;
-        }
-      });
-
-      setDailyData(Object.entries(dailyMap).map(([date, v]) => ({ date, ...v })));
+      // Zero-filled by the RPC, so a quiet day is a real zero instead of a
+      // missing point that would make the chart look broken.
+      setDailyData(
+        (dailyResult.data || []).map((d: any) => ({
+          date: new Date(d.day).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+          revenue: Number(d.earnings || 0),
+          orders: Number(d.orders || 0),
+        })),
+      );
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -240,7 +254,7 @@ export function VendorDashboard() {
               <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-success" />
               </div>
-              <span className="text-xs text-muted-foreground">Revenue (30d)</span>
+              <span className="text-xs text-muted-foreground">Earnings (30d)</span>
             </div>
             <div className="flex items-end gap-2">
               <p className="text-2xl font-bold">{formatPrice(stats.total_revenue)}</p>
@@ -253,6 +267,28 @@ export function VendorDashboard() {
                 {formatPercentChange(stats.total_revenue, stats.previous_revenue)}
               </span>
             </div>
+            <p className="text-xs text-muted-foreground mt-2">Your share of merchandise, after platform commission. Excludes tax and shipping.</p>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <Card className="p-5 bg-card border-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-primary" />
+              </div>
+              <span className="text-xs text-muted-foreground">Balance Owed</span>
+            </div>
+            <div className="flex items-end gap-2">
+              <p className="text-2xl font-bold">{formatPrice(stats.outstanding_balance)}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Lifetime earned {formatPrice(stats.lifetime_earnings)} &middot; paid out {formatPrice(stats.total_paid_out)}
+            </p>
           </Card>
         </motion.div>
 

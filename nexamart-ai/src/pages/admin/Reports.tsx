@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp, Download } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, TrendingUp, Download, Store } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '../../lib/supabaseClient';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -67,6 +68,11 @@ interface TopProduct {
 
 interface AnalyticsData {
   totalRevenue: number;
+  gmv: number;
+  refunded: number;
+  taxCollected: number;
+  shippingCollected: number;
+  vendorEarnings: number;
   totalOrders: number;
   totalUsers: number;
   totalProducts: number;
@@ -81,6 +87,11 @@ export function AdminReports() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
   const [data, setData] = useState<AnalyticsData>({
     totalRevenue: 0,
+    gmv: 0,
+    refunded: 0,
+    taxCollected: 0,
+    shippingCollected: 0,
+    vendorEarnings: 0,
     totalOrders: 0,
     totalUsers: 0,
     totalProducts: 0,
@@ -97,17 +108,31 @@ export function AdminReports() {
     setLoading(true);
     try {
       const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      const [ordersResult, usersResult, productsResult] = await Promise.all([
+      // Money is computed in the database. The old code summed total_amount
+      // over every order regardless of payment_status, so cancelled, failed
+      // and unpaid orders all appeared as revenue. tax and shipping are
+      // pass-through and are never marketplace revenue, so they are reported
+      // separately rather than folded into the headline number.
+      const [moneyResult, dailyResult, ordersResult, usersResult, productsResult] = await Promise.all([
+        supabase.rpc('admin_financial_summary', {
+          p_from: startDate.toISOString(),
+          p_to: endDate.toISOString(),
+        }),
+        supabase.rpc('admin_daily_commission', {
+          p_from: startDate.toISOString(),
+          p_to: endDate.toISOString(),
+        }),
         supabase
           .from('orders')
           .select(`
             id,
-            total_amount,
             created_at,
-            status,
+            payment_status,
+            refunded_at,
             order_items (
               quantity,
               product_price,
@@ -117,33 +142,39 @@ export function AdminReports() {
               )
             )
           `)
+          .in('payment_status', ['paid', 'refunded'])
           .gte('created_at', startDate.toISOString()),
         supabase.from('profiles').select('id'),
         supabase.from('products').select('id'),
       ]);
 
+      if (moneyResult.error) {
+        console.error('admin_financial_summary failed:', moneyResult.error);
+        toast.error('Financial figures unavailable', {
+          description: 'Apply migrations 0037 and 0039 in Supabase, then reload.',
+        });
+      }
+
+      const m = moneyResult.data?.[0];
       const orders = ordersResult.data || [];
-      const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
-      const totalOrders = orders.length;
       const totalUsers = usersResult.data?.length || 0;
       const totalProducts = productsResult.data?.length || 0;
 
-      const revenueByDay: { date: string; amount: number }[] = [];
-      const ordersByDay: { date: string; count: number }[] = [];
+      // Daily series comes from the zero-filled RPC, so quiet days are real
+      // zeroes rather than missing points in the chart.
+      const revenueByDay: { date: string; amount: number }[] = (dailyResult.data || []).map((d: any) => ({
+        date: new Date(d.day).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+        amount: Number(d.commission || 0),
+      }));
+      const ordersByDay: { date: string; count: number }[] = (dailyResult.data || []).map((d: any) => ({
+        date: new Date(d.day).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+        count: Number(d.orders || 0),
+      }));
 
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        const dayOrders = orders.filter((order: any) => order.created_at.startsWith(dateStr));
-        const dayRevenue = dayOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
-        const label = date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-        revenueByDay.push({ date: label, amount: dayRevenue });
-        ordersByDay.push({ date: label, count: dayOrders.length });
-      }
-
+      // Top products only counts live (non-refunded) orders, otherwise a
+      // refunded order still ranks its products as best sellers.
       const productSales = new Map<string, { quantity: number; revenue: number }>();
-      orders.forEach((order: any) => {
+      orders.filter((o: any) => !o.refunded_at).forEach((order: any) => {
         (order.order_items || []).forEach((item: any) => {
           const productName = item.products?.name || 'Unknown';
           const current = productSales.get(productName) || { quantity: 0, revenue: 0 };
@@ -160,8 +191,13 @@ export function AdminReports() {
         .slice(0, 8);
 
       setData({
-        totalRevenue,
-        totalOrders,
+        totalRevenue: Number(m?.net_platform_revenue ?? 0),
+        gmv: Number(m?.gmv ?? 0),
+        refunded: Number(m?.refunded_amount ?? 0),
+        taxCollected: Number(m?.tax_collected ?? 0),
+        shippingCollected: Number(m?.shipping_collected ?? 0),
+        vendorEarnings: Number(m?.vendor_earnings_paid ?? 0),
+        totalOrders: Number(m?.orders_paid ?? 0),
         totalUsers,
         totalProducts,
         revenueByDay,
@@ -178,8 +214,13 @@ export function AdminReports() {
   const exportCSV = () => {
     const headers = 'Metric,Value\n';
     const rows = [
-      `Total Revenue,${data.totalRevenue}`,
-      `Total Orders,${data.totalOrders}`,
+      `Platform Commission (net),${data.totalRevenue}`,
+      `GMV (merchandise, paid),${data.gmv}`,
+      `Vendor Earnings,${data.vendorEarnings}`,
+      `Tax Collected,${data.taxCollected}`,
+      `Shipping Collected,${data.shippingCollected}`,
+      `Refunded,${data.refunded}`,
+      `Paid Orders,${data.totalOrders}`,
       `Total Users,${data.totalUsers}`,
       `Total Products,${data.totalProducts}`,
     ];
@@ -220,10 +261,10 @@ export function AdminReports() {
   }
 
   const statCards = [
-    { icon: DollarSign, label: 'Total Revenue', value: formatPrice(data.totalRevenue), color: 'emerald', delay: 0.1 },
-    { icon: ShoppingCart, label: 'Total Orders', value: data.totalOrders, color: 'yellow', delay: 0.2 },
-    { icon: Users, label: 'Total Users', value: data.totalUsers, color: 'blue', delay: 0.3 },
-    { icon: Package, label: 'Total Products', value: data.totalProducts, color: 'purple', delay: 0.4 },
+    { icon: DollarSign, label: 'Commission (net)', value: formatPrice(data.totalRevenue), color: 'emerald', delay: 0.1 },
+    { icon: TrendingUp, label: 'GMV (merchandise)', value: formatPrice(data.gmv), color: 'blue', delay: 0.2 },
+    { icon: Store, label: 'Vendor Earnings', value: formatPrice(data.vendorEarnings), color: 'green', delay: 0.3 },
+    { icon: ShoppingCart, label: 'Paid Orders', value: data.totalOrders, color: 'yellow', delay: 0.4 },
   ];
 
   return (
@@ -266,7 +307,8 @@ export function AdminReports() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
           <Card className="p-6 bg-card border-border">
-            <h3 className="font-semibold mb-4">Revenue Over Time</h3>
+            <h3 className="font-semibold mb-1">Platform Commission Over Time</h3>
+            <p className="text-xs text-muted-foreground mb-4">Commission earned on live paid orders. Refunded orders are excluded from the day they are refunded.</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.revenueByDay} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
@@ -306,7 +348,8 @@ export function AdminReports() {
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
           <Card className="p-6 bg-card border-border">
-            <h3 className="font-semibold mb-4">Orders Per Day</h3>
+            <h3 className="font-semibold mb-1">Paid Orders Per Day</h3>
+            <p className="text-xs text-muted-foreground mb-4">Paid and refunded orders only. Cancelled, failed and unpaid orders are not counted.</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.ordersByDay} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
