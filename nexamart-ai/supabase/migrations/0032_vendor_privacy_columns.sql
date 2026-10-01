@@ -52,7 +52,14 @@
 --   the table grant and re-revokes the five private columns on top of it.
 --   See supabase/verification/0033_verify.sql for the final-state checks.
 --
--- ROLLBACK: `grant select on public.vendors to anon, authenticated;`
+-- ROLLBACK
+--   An earlier revision of this line said `grant select on public.vendors to
+--   anon, authenticated;`, which stopped being a rollback once 0034 dropped
+--   phone / rejection_reason / rejection_count / last_rejected_at off the
+--   table: that statement no longer re-exposes anything. Reverting the privacy
+--   work now means dropping public.vendor_private, restoring those four columns
+--   from it, and re-pointing get_my_vendor / admin_list_vendors at vendors
+--   directly. Treat 0032+0033+0034 as one unit; do not roll back 0032 alone.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------

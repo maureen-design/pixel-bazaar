@@ -34,6 +34,7 @@ interface Draft {
   bankBranch: string;
   bankSwiftCode: string;
   bankTransferDeadlineHours: string;
+  platformCommissionPercent: string;
 }
 
 function settingsToDraft(s: PlatformSettings): Draft {
@@ -58,6 +59,7 @@ function settingsToDraft(s: PlatformSettings): Draft {
     bankBranch: s.bankBranch,
     bankSwiftCode: s.bankSwiftCode,
     bankTransferDeadlineHours: String(s.bankTransferDeadlineHours),
+    platformCommissionPercent: String(s.platformCommissionPercent),
   };
 }
 
@@ -65,6 +67,11 @@ function buildPayload(draft: Draft): Partial<PlatformSettings> {
   const taxRate = Number(draft.taxRate);
   if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) {
     throw new Error('Tax rate must be between 0 and 100');
+  }
+
+  const commission = Number(draft.platformCommissionPercent);
+  if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
+    throw new Error('Platform commission must be between 0 and 100 percent');
   }
 
   const countySurcharges: Record<string, number> = {};
@@ -108,6 +115,9 @@ function buildPayload(draft: Draft): Partial<PlatformSettings> {
     bankBranch: draft.bankBranch.trim(),
     bankSwiftCode: draft.bankSwiftCode.trim(),
     bankTransferDeadlineHours: numeric(draft.bankTransferDeadlineHours, 'Bank transfer deadline'),
+    // Percent, like taxRate. updateSettings() converts to the fraction the
+    // database column and platform_commission_rate() expect.
+    platformCommissionPercent: commission,
   };
 }
 
@@ -303,6 +313,31 @@ export function AdminSettings() {
           />
           <p className="text-sm text-muted-foreground">
             VAT percentage applied to the product subtotal (not shipping). Order confirmations and the storefront update automatically.
+          </p>
+        </div>
+      </section>
+
+      {/* Platform commission */}
+      <section className="bg-card rounded-xl p-6 border border-border max-w-2xl">
+        <h2 className="text-xl font-semibold mb-5">Platform Commission</h2>
+        <div className="space-y-4">
+          <Input
+            label="Commission Rate (%)"
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={draft.platformCommissionPercent}
+            onChange={(e) => set('platformCommissionPercent', e.target.value)}
+          />
+          <p className="text-sm text-muted-foreground">
+            The marketplace's cut of each sale. Charged on the{' '}
+            <strong className="text-foreground">merchandise subtotal only</strong> — tax, shipping and
+            county surcharges are never charged commission.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            The rate is snapshotted onto an order when it is placed, so changing this later does not
+            retroactively alter existing orders. Vendors receive the remainder.
           </p>
         </div>
       </section>

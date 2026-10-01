@@ -27,12 +27,15 @@ export function Profile() {
   const handleUpdate = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ full_name: fullName, phone })
-        .eq('id', user?.id);
+        .eq('id', user?.id)
+        .select('id')
+        .maybeSingle();
       
       if (error) throw error;
+      if (!data) throw new Error('No profile row exists for your account. Please sign out and sign in again.');
       toast.success('Profile updated successfully!');
     } catch (error: any) {
       console.error('Profile update error:', error);
