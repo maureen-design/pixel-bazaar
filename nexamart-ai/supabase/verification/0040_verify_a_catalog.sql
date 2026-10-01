@@ -7,7 +7,7 @@
 -- grid per Run, so if this is pasted together with the other sections you will
 -- see a different section's output and assume this one was empty.
 --
--- Expected: 6 rows, ok = true for all of them.
+-- Expected: 9 rows (6 checks + 3 lines of 004dump), ok = true for all checks.
 -- This script is read-only.
 -- ============================================================================
 
@@ -62,14 +62,48 @@ select '003' as check,
            and o.paid_at is null) as ok,
        'FALSE means some paid orders have no paid_at and the coalesce fallback is being used; true means every settled order has a real payment timestamp' as detail
 union all
+-- PostgreSQL stores `set search_path = ''` as search_path="" WITH the quotes
+-- attached, so matching the bare prefix 'search_path=' finds nothing and
+-- reports a false negative. Confirmed against the 004dump row below, which
+-- prints the stored value verbatim.
 select '004' as check,
        (select count(*) = 0
           from pg_proc p
            join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'public'
             and p.proname in ('admin_financial_summary','admin_daily_commission','admin_refunds_in_window')
-            and (NOT p.prosecdef
-                 OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig,'{}')) c
-                                 WHERE c = 'search_path='))) as ok,
-       'every admin reporting function is SECURITY DEFINER with a pinned empty search_path' as detail
+            and NOT (
+                 p.prosecdef
+                 -- Must exist a search_path entry whose value is empty after
+                 -- stripping quotes. Phrased positively as a definition of
+                 -- SAFE, because the obvious negative form is inverted: a
+                 -- function with no search_path setting at all, and a function
+                 -- with search_path=public, are both unsafe and both satisfy
+                 -- "no entry has a non-empty value".
+                 and EXISTS (
+                       select 1
+                         from unnest(coalesce(p.proconfig, '{}')) c
+                        where c like 'search_path=%'
+                          -- chr() avoids having to write a literal quote, which
+                          -- needs four characters and silently derails the whole
+                          -- statement when miscounted.
+                          and nullif(
+                                btrim(replace(replace(
+                                  substr(c, length('search_path=') + 1),
+                                  chr(34), ''),
+                                  chr(39), '')),
+                                '') is null
+                     )
+               )) as ok,
+       'every admin reporting function is SECURITY DEFINER with search_path pinned to empty' as detail
+union all
+-- Not a pass or fail. Shows the stored setting verbatim so a false 004 can be
+-- diagnosed without guessing.
+select '004dump' as check,
+       null::boolean as ok,
+       p.proname || ' | prosecdef=' || p.prosecdef || ' | proconfig=' || coalesce(array_to_string(p.proconfig, ' ~ '), '(null)')
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('admin_financial_summary','admin_daily_commission','admin_refunds_in_window')
 order by 1;
