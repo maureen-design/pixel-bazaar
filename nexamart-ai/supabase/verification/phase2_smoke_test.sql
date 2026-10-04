@@ -161,11 +161,22 @@ select '20 anon cannot call vendor financials',
              'public.vendor_financial_summary(uuid)'::regprocedure,'EXECUTE'))::text,
        'must be true'
 union all
-select '21 bank transfer cannot be forced on (0036)',
-       (not has_function_privilege('anon',
-             'public.enforce_bank_transfer_enabled()'::regprocedure,'EXECUTE')
-        or true)::text,
-       'informational'
+-- The guard is a BEFORE INSERT/UPDATE trigger, not something anon can call
+-- directly, so a privilege check proves nothing here: the old `or true` made
+-- this always pass and verified nothing. The meaningful assertion is that the
+-- fail-closed trigger from 0036 is actually installed.
+select '21 bank transfer fail-closed trigger installed (0036)',
+       exists (
+         select 1
+           from pg_trigger t
+           join pg_class c on c.oid = t.tgrelid
+           join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public'
+            and c.relname = 'orders'
+            and not t.tgisinternal
+            and t.tgfoid = 'public.enforce_bank_transfer_enabled()'::regprocedure
+       )::text,
+       'must be true'
 
 ) checks
 order by check_name;

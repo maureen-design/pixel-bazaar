@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
 import { ProductCard } from '../components/ProductCard';
 import { WishlistButton } from '../components/WishlistButton';
+import { GuestAuthPrompt } from '../components/GuestAuthPrompt';
 import { Button } from '../components/ui/button';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -20,6 +21,15 @@ import { Badge } from '../components/ui/badge';
 import { countryFlag } from '../utils/flags';
 import { getStockState } from '../lib/stock';
 
+interface ProductReview {
+  id: string;
+  rating: number | null;
+  comment: string | null;
+  created_at: string;
+  /** PostgREST returns the embedded `profiles` row as an array. */
+  profiles: { full_name: string | null }[] | null;
+}
+
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -30,7 +40,7 @@ export function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
-  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
@@ -38,35 +48,64 @@ export function ProductDetail() {
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      fetchApprovedReviews(id);
-    }
-    setQuantity(1);
-    setSelectedImage(0);
-    setSelectedAttributes({});
+  // Reset variant/quantity/image state during render when the route param
+// changes, rather than in an effect. React documents this as the way to
+// "adjust state when a prop changes".
+const [previousProductId, setPreviousProductId] = useState(id);
+if (previousProductId !== id) {
+  setPreviousProductId(id);
+  setQuantity(1);
+  setSelectedImage(0);
+  setSelectedAttributes({});
+}
+
+useEffect(() => {
+    let cancelled = false;
+    const productId = id;
+
+    const loadReviews = async () => {
+      if (!productId) {
+        setReviews([]);
+        setReviewsLoading(false);
+        return;
+      }
+      setReviewsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('id, rating, comment, created_at, profiles(full_name)')
+          .eq('product_id', productId)
+          .eq('is_approved', true)
+          .eq('is_hidden', false)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        if (!cancelled) setReviews((data as ProductReview[]) || []);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load reviews', err);
+          setReviews([]);
+        }
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
-
-  const fetchApprovedReviews = async (productId: string) => {
-    try {
-      const { data } = await supabase
-        .from('reviews')
-        .select('id, rating, comment, created_at, profiles(full_name)')
-        .eq('product_id', productId)
-        .eq('is_approved', true)
-        .eq('is_hidden', false)
-        .order('created_at', { ascending: false });
-      setReviews(data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setReviewsLoading(false);
-    }
-  };
 
   const handleExplain = async () => {
     if (!product) return;
+    if (!user) {
+      setAuthPromptOpen(true);
+      return;
+    }
     setExplaining(true);
     setExplanation(null);
     try {
@@ -83,7 +122,7 @@ export function ProductDetail() {
       const raw = data.data.explanation || '';
       const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').replace(/^\s*[-*]\s+/gm, '');
       setExplanation(clean);
-    } catch (err: any) {
+    } catch {
       toast.error('AI explanation unavailable. Try again later.');
     } finally {
       setExplaining(false);
@@ -111,8 +150,8 @@ export function ProductDetail() {
       setReviewRating(0);
       setReviewComment('');
       setShowReviewForm(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit review');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit review');
     } finally {
       setSubmittingReview(false);
     }
@@ -318,9 +357,15 @@ export function ProductDetail() {
               )}
             </div>
 
-            <p className="text-secondary-foreground mb-6 leading-relaxed">
-              {product.description}
-            </p>
+            <div className="mb-6">
+              <p className="text-secondary-foreground leading-relaxed">
+                {product.description}
+              </p>
+              <SpeakButton
+                text={product.description || ''}
+                label="Read product description aloud"
+              />
+            </div>
 
             {/* Variant Selector */}
             {hasVariants && (
@@ -507,6 +552,15 @@ export function ProductDetail() {
               )}
             </div>
 
+            <GuestAuthPrompt
+              open={authPromptOpen}
+              onOpenChange={setAuthPromptOpen}
+              nextPath={id ? `/product/${id}` : '/'}
+              title="Get AI explanations"
+              message="Create an account or sign in to ask Nexa to explain products in plain language and read them aloud."
+              icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
+            />
+
             {/* Category */}
             {product.category && (
               <div className="mt-6">
@@ -632,13 +686,13 @@ export function ProductDetail() {
                         <MessageSquare className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">{r.profiles?.full_name || 'Anonymous'}</p>
+                        <p className="font-medium text-foreground">{r.profiles?.[0]?.full_name || 'Anonymous'}</p>
                         <p className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-1" aria-label={`${r.rating} out of 5 stars`}>
+                    <div className="flex gap-1" aria-label={`${r.rating ?? 0} out of 5 stars`}>
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <Star key={star} className={`w-4 h-4 ${star <= r.rating ? 'fill-warning text-warning' : 'text-muted-foreground'}`} aria-hidden="true" />
+                        <Star key={star} className={`w-4 h-4 ${star <= (r.rating ?? 0) ? 'fill-warning text-warning' : 'text-muted-foreground'}`} aria-hidden="true" />
                       ))}
                     </div>
                   </div>

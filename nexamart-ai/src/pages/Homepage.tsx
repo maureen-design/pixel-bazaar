@@ -106,7 +106,7 @@ export function Homepage() {
     const pages: React.ReactNode[] = [];
     const maxVisible = 5;
     let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-    let end = Math.min(totalPages, start + maxVisible - 1);
+    const end = Math.min(totalPages, start + maxVisible - 1);
     if (end - start + 1 < maxVisible) {
       start = Math.max(1, end - maxVisible + 1);
     }
@@ -267,7 +267,7 @@ export function Homepage() {
               </h2>
               <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-ai bg-ai/10 px-2.5 py-1 rounded-full">
                 <Sparkles className="w-3 h-3" />
-                AI Recommended
+                Featured
               </span>
             </div>
             <select

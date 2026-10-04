@@ -11,7 +11,9 @@ import { Loader2, Sparkles, Check, ArrowLeftRight, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatPrice } from '../config/pricing';
 import { SpeakButton } from '../components/ui/SpeakButton';
+import { GuestAuthPrompt } from '../components/GuestAuthPrompt';
 import { useCompare } from '../context/CompareContext';
+import { useAuth } from '../context/AuthContext';
 
 interface CompareResult {
   summary: string;
@@ -21,6 +23,7 @@ interface CompareResult {
 
 export function Compare() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const urlIds = searchParams.get('ids')?.split(',').filter(Boolean) || [];
   const { products: contextProducts, clearAll: clearCompareContext } = useCompare();
@@ -28,27 +31,36 @@ export function Compare() {
   const [selected, setSelected] = useState<Product[]>([]);
   const [comparing, setComparing] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
 
-  useEffect(() => {
-    if (loading) return;
+  const urlIdsKey = urlIds.join(',');
 
-    if (urlIds.length >= 2 && products.length > 0) {
+  // Hydrate the selection from the ?ids= param during render instead of in an
+  // effect. React documents this as the way to "adjust state when a prop
+  // changes", and it avoids a cascading render on mount.
+  const [previousUrlIdsKey, setPreviousUrlIdsKey] = useState(urlIdsKey);
+  if (previousUrlIdsKey !== urlIdsKey) {
+    setPreviousUrlIdsKey(urlIdsKey);
+    if (!loading && urlIds.length >= 2 && products.length > 0) {
       const matches = products.filter((p) => urlIds.includes(p.id)).slice(0, 3);
       if (matches.length >= 2) {
         setSelected(matches);
         setResult(null);
-        return;
       }
     }
+  }
 
-    if (contextProducts.length >= 2 && urlIds.length === 0) {
-      setSelected(contextProducts);
-      setResult(null);
-      clearCompareContext();
-      const ids = contextProducts.map((p) => p.id).join(',');
-      navigate(`/compare?ids=${ids}`, { replace: true });
-    }
-  }, [loading, products, searchParams, urlIds.join(','), contextProducts, navigate, clearCompareContext]);
+  // Drain the compare context into the URL. Navigation flips urlIds above,
+  // which hydrates `selected` on the next render.
+  useEffect(() => {
+    if (loading) return;
+    if (urlIds.length > 0) return;
+    if (contextProducts.length < 2) return;
+
+    const ids = contextProducts.map((p) => p.id).join(',');
+    clearCompareContext();
+    navigate(`/compare?ids=${ids}`, { replace: true });
+  }, [loading, urlIds.length, contextProducts, navigate, clearCompareContext]);
 
   const toggleProduct = (product: Product) => {
     setResult(null);
@@ -69,6 +81,10 @@ export function Compare() {
       toast.error('Select at least 2 products to compare');
       return;
     }
+    if (!user) {
+      setAuthPromptOpen(true);
+      return;
+    }
     setComparing(true);
     setResult(null);
     try {
@@ -85,7 +101,7 @@ export function Compare() {
       if (!data?.success) throw new Error(data?.error || 'Comparison failed');
 
       setResult(data.data);
-    } catch (err: any) {
+    } catch {
       toast.error('AI comparison failed. Try again later.');
     } finally {
       setComparing(false);
@@ -262,6 +278,14 @@ export function Compare() {
         )}
       </div>
       <Footer />
+      <GuestAuthPrompt
+        open={authPromptOpen}
+        onOpenChange={setAuthPromptOpen}
+        nextPath={`/compare?ids=${selected.map((p) => p.id).join(',')}`}
+        title="Compare with AI"
+        message="Create an account or sign in to get an AI summary of how these products differ. The specification table below stays available either way."
+        icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
+      />
     </div>
   );
 }

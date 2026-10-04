@@ -2,6 +2,17 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
+function siteLink(path: string): string {
+  return `${getSiteUrl()}${path}`;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -135,7 +146,7 @@ serve(async (req) => {
             <tr><td style="padding:8px 0;color:#94a3b8;">Total</td><td style="padding:8px 0;color:#1e293b;font-weight:600;">${total}</td></tr>
           </table>
           <div style="text-align:center;margin:32px 0;">
-            <a href="${Deno.env.get('SITE_URL') || 'https://nexamart.ai'}/admin/orders"
+            <a href="${siteLink('/admin/orders')}"
                style="display:inline-block;padding:14px 32px;background:#2563EB;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">
               View Orders
             </a>
@@ -158,7 +169,7 @@ serve(async (req) => {
             <tr><td style="padding:8px 0;color:#94a3b8;">Applicant</td><td style="padding:8px 0;color:#1e293b;">${applicantName}</td></tr>
           </table>
           <div style="text-align:center;margin:32px 0;">
-            <a href="${Deno.env.get('SITE_URL') || 'https://nexamart.ai'}/admin/vendors"
+            <a href="${siteLink('/admin/vendors')}"
                style="display:inline-block;padding:14px 32px;background:#2563EB;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">
               Review Application
             </a>

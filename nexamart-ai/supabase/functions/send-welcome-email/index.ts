@@ -2,6 +2,13 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -53,7 +60,7 @@ serve(async (req) => {
       .maybeSingle();
 
     const siteName = settings?.site_name || 'NexaMart AI';
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://nexamart.ai';
+    const siteUrl = getSiteUrl();
     const firstName = escapeHtml(full_name?.split(' ')[0] || 'there');
 
     const subject = `Welcome to ${siteName}`;

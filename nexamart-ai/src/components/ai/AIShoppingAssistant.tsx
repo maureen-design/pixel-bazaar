@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
 import { ShoppingAssistantModal } from './ShoppingAssistantModal';
+import { GuestAuthPrompt } from '../GuestAuthPrompt';
+import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
 
 interface AIShoppingAssistantProps {
@@ -9,19 +12,42 @@ interface AIShoppingAssistantProps {
 }
 
 export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }: AIShoppingAssistantProps) {
+  const { user } = useAuth();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+
+  const handleClick = () => {
+    if (!user) {
+      setPromptOpen(true);
+      return;
+    }
+    setOpen(true);
+  };
+
+  const prompt = (
+    <GuestAuthPrompt
+      open={promptOpen}
+      onOpenChange={setPromptOpen}
+      nextPath={`${location.pathname}${location.search}`}
+      title="Ask Nexa"
+      message="Create an account or sign in to use Nexa, your AI shopping assistant."
+      icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
+    />
+  );
 
   if (variant === 'cta') {
     return (
       <>
         <button
-          onClick={() => setOpen(true)}
+          onClick={handleClick}
           className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand to-brand-dark text-white font-medium rounded-xl hover:from-brand-dark hover:to-brand transition-all shadow-lg shadow-primary/25"
         >
           <Sparkles aria-hidden="true" className="w-4 h-4" />
           Ask Nexa
         </button>
         <ShoppingAssistantModal open={open} onOpenChange={setOpen} initialCategoryId={initialCategoryId} />
+        {prompt}
       </>
     );
   }
@@ -29,7 +55,7 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={handleClick}
         aria-label="Open Nexa Shopping Assistant"
         className={cn(
           'fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full',
@@ -41,6 +67,7 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
         {open ? <X aria-hidden="true" className="w-6 h-6" /> : <Sparkles aria-hidden="true" className="w-6 h-6" />}
       </button>
       <ShoppingAssistantModal open={open} onOpenChange={setOpen} initialCategoryId={initialCategoryId} />
+      {prompt}
     </>
   );
 }

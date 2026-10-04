@@ -8,6 +8,7 @@ import { PasswordInput } from '../../components/ui/PasswordInput';
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements';
 import { meetsAllRequirements, validateFullName } from '../../utils/passwordValidation';
 import { toast } from 'sonner';
+import { AlertCircle } from 'lucide-react';
 import { useSettings } from '../../hooks/useSettings';
 import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
 
@@ -18,6 +19,10 @@ export function Signup() {
   const [fullName, setFullName] = useState('');
   const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string; confirmPassword?: string }>({});
   const [loading, setLoading] = useState(false);
+  // Set when Supabase reports the address is already registered. Kept as
+  // state rather than a toast so the user gets two working exits instead of a
+  // dead end.
+  const [duplicateEmail, setDuplicateEmail] = useState(false);
   const { signUp } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -58,6 +63,7 @@ export function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setDuplicateEmail(false);
     if (!validate()) return;
 
     const rateLimitKey = `signup:${email.trim().toLowerCase()}`;
@@ -72,11 +78,20 @@ export function Signup() {
       await signUp(email.trim(), password, fullName.trim());
       toast.success('Account created! Please check your email to verify.');
       navigate(`/login${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`);
-    } catch (error: any) {
-      const message = error?.message || 'Failed to create account';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create account';
       const lower = (message as string).toLowerCase();
+      // Supabase reports a duplicate address as "User already registered".
+      // The toast alone left the user at a dead end, having filled in a whole
+      // form for nothing. Rendering the panel instead offers a direct way back
+      // to sign-in and to password recovery.
+      //
+      // This stays on SUBMIT rather than on keystroke. Probing as the user
+      // types would turn the signup form into an account-enumeration oracle,
+      // which is exactly what ForgotPassword's neutral "if an account exists"
+      // wording exists to avoid.
       if (lower.includes('already registered') || lower.includes('already been registered')) {
-        toast.error('An account with this email already exists. Please sign in instead.');
+        setDuplicateEmail(true);
       } else {
         toast.error(message);
       }
@@ -87,6 +102,7 @@ export function Signup() {
 
   const clearFieldError = (field: 'fullName' | 'email' | 'password' | 'confirmPassword') => {
     setErrors((prev) => ({ ...prev, [field]: '' }));
+    if (field === 'email') setDuplicateEmail(false);
   };
 
   return (
@@ -98,6 +114,34 @@ export function Signup() {
           : `Join ${settings.siteName}`
       }
     >
+      {duplicateEmail && (
+        <div
+          role="status"
+          className="rounded-xl border border-border bg-card p-5 mb-5 space-y-4"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle aria-hidden="true" className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">
+                An account already exists for {email.trim()}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Sign in with your existing password, or reset it if you can't remember it.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <Link to={`/login${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`}>
+              <Button className="w-full">Sign In</Button>
+            </Link>
+            <Link to="/forgot-password" className="text-center">
+              <Button variant="ghost" className="w-full">Forgot your password?</Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <Input
           label="Full Name"
@@ -155,7 +199,7 @@ export function Signup() {
           </p>
         )}
         <Button type="submit" className="w-full" loading={loading}>
-          Create Account
+          {duplicateEmail ? 'Create Another Account' : 'Create Account'}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}

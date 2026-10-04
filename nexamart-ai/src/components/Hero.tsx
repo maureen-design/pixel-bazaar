@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, Store, Lock, ArrowRight, Headphones, Search, ShoppingCart, PackageCheck, ShieldCheck, Heart, Sparkles, Info } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMarketplaceStats } from '../hooks/useMarketplaceStats';
+import { WishlistButton } from './WishlistButton';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { countryFlag } from '../utils/flags';
@@ -17,6 +18,17 @@ interface HeroProduct {
     store_name: string;
     country?: string | null;
   };
+}
+
+interface HeroProductRow {
+  id: string;
+  name: string;
+  images: string[] | null;
+  price: number;
+  vendor: {
+    store_name: string;
+    country?: string | null;
+  } | null;
 }
 
 interface HeroProps {
@@ -45,16 +57,15 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
       .limit(10)
       .then(({ data }) => {
         if (!data || data.length === 0) return;
-        const withImages = data.filter(
-          (p) => p.images && p.images.length > 0
-        );
+        const rows = data as unknown as HeroProductRow[];
+        const withImages = rows.filter((p) => p.images && p.images.length > 0);
         setHeroProducts(
-          withImages.slice(0, 5).map((p: any) => ({
+          withImages.slice(0, 5).map((p) => ({
             id: p.id,
             name: p.name,
-            image: p.images[0],
+            image: p.images![0],
             price: p.price,
-            vendor: p.vendor,
+            vendor: p.vendor ?? undefined,
           }))
         );
       });
@@ -245,11 +256,11 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
             Welcome back, {userName}
           </h1>
           <p className="text-lg text-muted-foreground mb-4">
-            Here's what we think you'll like today.
+            Popular picks from verified vendors.
           </p>
           <div className="inline-flex items-center gap-2 bg-ai/10 text-ai px-3 py-1.5 rounded-full text-xs font-medium mb-6">
             <Sparkles className="w-3.5 h-3.5" />
-            AI RECOMMENDATION
+            Popular picks
             <Info className="w-3.5 h-3.5 opacity-60" />
           </div>
           <div className="flex flex-col sm:flex-row items-start gap-3">
@@ -301,7 +312,7 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
                       />
                       <div className="absolute top-2 left-2">
                         <span className="bg-ai/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
-                          Recommended for you
+                          Top rated
                         </span>
                       </div>
                     </div>
@@ -323,12 +334,7 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
                         <span className="text-sm font-bold text-foreground">
                           {formatPrice(product.price)}
                         </span>
-                        <button
-                          className="p-1.5 rounded-full hover:bg-muted transition-colors"
-                          aria-label="Add to wishlist"
-                        >
-                          <Heart className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                        </button>
+                        <WishlistButton productId={product.id} variant="subtle" />
                       </div>
                     </div>
                   </Link>

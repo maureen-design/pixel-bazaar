@@ -2,6 +2,17 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
+function siteRedirect(path: string): string {
+  return `${getSiteUrl()}/auth/redirect?to=${encodeURIComponent(path)}`;
+}
+
 function formatCurrency(amount: number | null | undefined): string {
   const n = Number(amount) || 0;
   return `KES ${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
@@ -272,7 +283,7 @@ function generateCustomerEmail(order: any, customer: any, items: any[], site: an
     <div class="address-block">${addressBlock}</div>
     ${paymentMethod ? `<h3>Payment Method</h3><p style="color: #cbd5e1;">${escapeHtml(paymentMethod)}</p>` : ''}
     ${paymentStatus}
-    ${!isCancellation ? `<a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/auth/redirect?to=${encodeURIComponent(`/orders/${order.order_number}`)}" class="button">${isPayLater ? 'View Payment Details' : isBankPending ? 'View Payment Instructions' : 'View My Order'}</a>` : ''}
+    ${!isCancellation ? `<a href="${siteRedirect(`/orders/${order.order_number}`)}" class="button">${isPayLater ? 'View Payment Details' : isBankPending ? 'View Payment Instructions' : 'View My Order'}</a>` : ''}
     <div class="footer">
       <p>${isCancellation ? 'If you still want to purchase these items, please place a new order.' : isPaymentSuccessful ? "We'll notify you once your order ships." : isBankPending ? 'Please complete your bank transfer before the deadline.' : isPayLater ? 'Please complete your payment before the deadline to avoid cancellation.' : "We'll notify you once your order ships."}</p>
       <p>Thank you for shopping with ${escapeHtml(site.name)}!</p>
@@ -379,7 +390,7 @@ function generateVendorEmail(order: any, customer: any, items: any[], site: any,
     ${paymentMethod ? `<p><strong>Payment Method:</strong> ${escapeHtml(paymentMethod)}</p>` : ''}
     ${paymentStatus}
     <div class="address-block">${addressBlock}</div>
-    ${!isCancellation ? `<div style="text-align: center; margin: 24px 0;"><a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/vendor/orders" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Order</a></div>` : ''}
+    ${!isCancellation ? `<div style="text-align: center; margin: 24px 0;"><a href="${siteRedirect('/vendor/orders')}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Order</a></div>` : ''}
     <div class="footer">
       <p>${isCancellation ? 'Order has been cancelled.' : isPaymentSuccessful ? 'Please process this order as soon as possible.' : isBankPending ? 'Please wait for admin verification before preparing this order.' : isPayLater ? 'Please wait for payment confirmation before processing this order.' : 'Please process this order as soon as possible.'}</p>
       <p>${escapeHtml(site.name)} Team</p>

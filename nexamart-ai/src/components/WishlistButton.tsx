@@ -9,7 +9,12 @@ import { GuestAuthPrompt } from './GuestAuthPrompt';
 interface WishlistButtonProps {
   productId: string;
   className?: string;
-  variant?: 'default' | 'icon';
+  /**
+   * default — labelled button for product detail.
+   * icon    — round overlay button for product imagery.
+   * subtle  — inline button for light card backgrounds.
+   */
+  variant?: 'default' | 'icon' | 'subtle';
 }
 
 export function WishlistButton({ productId, className = '', variant = 'icon' }: WishlistButtonProps) {
@@ -49,6 +54,28 @@ export function WishlistButton({ productId, className = '', variant = 'icon' }: 
           <Heart aria-hidden="true" className={`w-5 h-5 ${inWishlist ? 'fill-destructive' : ''}`} />
           {inWishlist ? 'Remove from Wishlist' : 'Add to Wishlist'}
         </button>
+        <GuestAuthPrompt open={promptOpen} onOpenChange={setPromptOpen} nextPath={nextPath} />
+      </>
+    );
+  }
+
+  if (variant === 'subtle') {
+    return (
+      <>
+        <motion.button
+          onClick={handleToggle}
+          whileTap={{ scale: 0.85 }}
+          animate={{ scale: inWishlist ? [1, 1.3, 1] : 1 }}
+          transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+          className={`p-1.5 rounded-full transition-colors ${
+            inWishlist
+              ? 'text-destructive bg-destructive/10 hover:bg-destructive/20'
+              : 'text-muted-foreground hover:bg-muted hover:text-destructive'
+          } ${className}`}
+          aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+        >
+          <Heart aria-hidden="true" className={`w-4 h-4 ${inWishlist ? 'fill-destructive' : ''}`} />
+        </motion.button>
         <GuestAuthPrompt open={promptOpen} onOpenChange={setPromptOpen} nextPath={nextPath} />
       </>
     );

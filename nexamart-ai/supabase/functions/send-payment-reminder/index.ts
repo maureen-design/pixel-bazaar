@@ -2,6 +2,17 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
+function siteRedirect(path: string): string {
+  return `${getSiteUrl()}/auth/redirect?to=${encodeURIComponent(path)}`;
+}
+
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const transporter = nodemailer.createTransport({
@@ -99,7 +110,7 @@ serve(async (req) => {
     </div>
     <p><strong>Amount Due:</strong> KES ${order.total_amount?.toLocaleString() || '0'}</p>
     <div style="text-align: center;">
-      <a href="${Deno.env.get('APP_URL') || 'http://localhost:5173'}/auth/redirect?to=${encodeURIComponent(`/orders/${order.order_number}`)}" class="button">View Payment Details</a>
+      <a href="${siteRedirect(`/orders/${order.order_number}`)}" class="button">View Payment Details</a>
     </div>
     <div class="footer">
       <p>If you already made the payment, please ignore this message.</p>

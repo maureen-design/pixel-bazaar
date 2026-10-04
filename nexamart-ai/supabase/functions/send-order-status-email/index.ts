@@ -2,6 +2,17 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
+function siteRedirect(path: string): string {
+  return `${getSiteUrl()}/auth/redirect?to=${encodeURIComponent(path)}`;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -97,7 +108,7 @@ serve(async (req) => {
 
     const siteName = settingsMap['site_name'] ?? 'NexaMart AI';
     const supportEmail = settingsMap['support_email'] ?? 'support@nexamart-ai.com';
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://nexamart.ai';
+    
 
     // Delivery method labels
     const deliveryLabels: Record<string, string> = {
@@ -191,7 +202,7 @@ serve(async (req) => {
             </div>
 
             <div style="text-align:center;margin:32px 0;">
-              <a href="${siteUrl}/auth/redirect?to=${encodeURIComponent(`/orders/${order.order_number}`)}"
+              <a href="${siteRedirect(`/orders/${order.order_number}`)}"
                  style="display:inline-block;padding:14px 32px;background:#2563EB;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">
                 ${status === 'shipped' ? 'Track My Order' : 'View My Order'}
               </a>

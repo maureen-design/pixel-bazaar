@@ -1,6 +1,13 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const DEFAULT_SITE_URL = 'https://pixel-bazaar-blue.vercel.app';
+
+function getSiteUrl(): string {
+  const configured = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL');
+  return (configured || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -125,7 +132,7 @@ serve(async (req) => {
     // paystack-webhook can resolve charge.success back to it.
     const reference = `PSK-${orderId}-${Date.now()}`;
 
-    const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:5173';
+    const siteUrl = getSiteUrl();
     const callbackUrl = `${siteUrl.replace(/\/$/, '')}/order-confirmation/${orderId}`;
 
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
