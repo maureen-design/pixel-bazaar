@@ -54,8 +54,9 @@ export function Homepage() {
   useEffect(() => {
     supabase
       .from('products')
-      .select('id')
+      .select('id, vendor:vendors!inner(is_verified)')
       .eq('status', 'active')
+      .eq('vendor.is_verified', true)
       .not('images', 'is', null)
       .order('rating', { ascending: false })
       .limit(5)

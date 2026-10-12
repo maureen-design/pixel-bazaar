@@ -15,8 +15,9 @@ export function useCategoryCounts() {
         const [productsRes, categoriesRes] = await Promise.all([
           supabase
             .from('products')
-            .select('category_id')
-            .eq('status', 'active'),
+            .select('category_id, vendor:vendors!inner(is_verified)')
+            .eq('status', 'active')
+            .eq('vendor.is_verified', true),
           supabase
             .from('categories')
             .select('id, parent_id'),
@@ -89,7 +90,8 @@ export function useCategoryFilter(categoryId: string | null) {
               slug
             )
           `)
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .eq('vendor.is_verified', true);
 
         if (filterCategoryIds) {
           query = query.in('category_id', filterCategoryIds);

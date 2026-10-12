@@ -51,8 +51,9 @@ function useFilterOptions() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('brand, product_type')
+          .select('brand, product_type, vendor:vendors!inner(is_verified)')
           .eq('status', 'active')
+          .eq('vendor.is_verified', true)
           .limit(1000);
         if (error || !data || cancelled) return;
         const brandSet = new Set<string>();

@@ -223,7 +223,8 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         `,
           { count: 'exact' }
         )
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .eq('vendor.is_verified', true);
 
       if (hasSearchTerm) {
         // Each token is expanded (stemmed + synonyms) and searched across all columns.

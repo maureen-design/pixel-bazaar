@@ -7,14 +7,18 @@ export async function logActivity(
   details: Record<string, any> = {}
 ) {
   try {
-    await supabase.from('activity_logs').insert({
+    const { error } = await supabase.from('activity_logs').insert({
       user_id: userId || null,
       user_email: userEmail || null,
       action,
       details,
       user_agent: navigator.userAgent,
     });
+
+    if (error) {
+      console.error('Failed to log activity:', action, error.message);
+    }
   } catch (err) {
-    console.error('Failed to log activity:', err);
+    console.error('Failed to log activity:', action, err);
   }
 }

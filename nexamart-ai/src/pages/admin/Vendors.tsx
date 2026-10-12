@@ -55,14 +55,21 @@ export function AdminVendors() {
   const approveVendor = async (id: string) => {
     const { error } = await supabase.rpc('approve_vendor', { target_vendor_id: id });
     if (error) { toast.error('Failed to approve'); return; }
-    // Log the action
-    await supabase.from('activity_logs').insert({
+    // Log the action. This insert is only authorized by the activity_logs
+    // INSERT policy added in migration 0042; before that every write here was
+    // denied by RLS and the discarded error made the UI claim success anyway.
+    const { error: logError } = await supabase.from('activity_logs').insert({
       user_id: user?.id || null,
       user_email: user?.email || null,
       action: 'vendor_approve',
       details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name },
     });
-    toast.success('Vendor approved');
+    if (logError) {
+      console.error('Failed to log vendor approval:', logError);
+      toast.error('Vendor approved, but the activity log could not be written');
+    } else {
+      toast.success('Vendor approved');
+    }
     supabase.functions.invoke('send-vendor-lifecycle', { body: { vendor_id: id, action: 'approved' } }).catch(() => {});
     fetchVendors();
   };
@@ -88,21 +95,24 @@ export function AdminVendors() {
     if (reasonError) {
       console.error('Failed to record rejection reason:', reasonError);
     }
-    // Log the action
-    await supabase.from('activity_logs').insert({
+    // Log the action (authorized by the 0042 activity_logs INSERT policy).
+    const { error: logError } = await supabase.from('activity_logs').insert({
       user_id: user?.id || null,
       user_email: user?.email || null,
       action: 'vendor_reject',
       details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name, reason: reason || null },
     });
+    if (logError) {
+      console.error('Failed to log vendor rejection:', logError);
+    }
 
     // The vendor is rejected either way: the RPC above already committed, and
-    // that is not something this handler can undo. But the reason they were
-    // given is missing, so do not claim success and do not email the applicant
-    // a reason that was never recorded. Returning here also keeps the two
+    // that is not something this handler can undo. But if the reason or the
+    // audit record is missing, do not claim success and do not email the
+    // applicant a reason that was never recorded. Returning here also keeps the
     // toasts from contradicting each other.
-    if (reasonError) {
-      toast.error('Vendor was rejected, but the reason was not saved');
+    if (reasonError || logError) {
+      toast.error('Vendor was rejected, but the audit record was not fully saved');
       fetchVendors();
       return;
     }
@@ -167,24 +177,31 @@ export function AdminVendors() {
     const ids = Array.from(selectedIds);
     const action = bulkConfirmOpen === 'approve' ? 'approve_vendor' : 'reject_vendor';
     let failures = 0;
+    let logFailures = 0;
 
     for (const id of ids) {
       const { error } = await supabase.rpc(action, { target_vendor_id: id });
       if (error) {
         failures++;
       } else {
-        // Log the action
-        await supabase.from('activity_logs').insert({
+        // Log the action (authorized by the 0042 activity_logs INSERT policy).
+        const { error: logError } = await supabase.from('activity_logs').insert({
           user_id: user?.id || null,
           user_email: user?.email || null,
           action: bulkConfirmOpen === 'approve' ? 'vendor_approve' : 'vendor_reject',
           details: { vendor_id: id, vendor_name: vendors.find(v => v.id === id)?.business_name || vendors.find(v => v.id === id)?.store_name, bulk: true },
         });
+        if (logError) {
+          console.error('Failed to log bulk vendor action:', id, logError.message);
+          logFailures++;
+        }
       }
     }
 
     if (failures > 0) {
       toast.error(`Failed to ${bulkConfirmOpen} ${failures} vendor(s)`);
+    } else if (logFailures > 0) {
+      toast.error(`${ids.length} vendor(s) ${bulkConfirmOpen === 'approve' ? 'approved' : 'rejected'}, but ${logFailures} audit log(s) failed`);
     } else {
       toast.success(`${ids.length} vendor(s) ${bulkConfirmOpen === 'approve' ? 'approved' : 'rejected'}`);
     }

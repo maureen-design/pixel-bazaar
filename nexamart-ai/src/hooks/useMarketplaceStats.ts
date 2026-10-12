@@ -9,10 +9,13 @@ export function useMarketplaceStats() {
     let cancelled = false;
 
     async function fetchStats() {
+      // Inner-join the vendor so the count only includes products from verified
+      // vendors, matching the filters applied to the product listings.
       const { count: products } = await supabase
         .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
+        .select('id, vendor:vendors!inner(is_verified)', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .eq('vendor.is_verified', true);
 
       // `id` rather than `*`: migration 0032 revoked SELECT on several vendors
       // columns for anon, and a star would expand to them even on a head count.

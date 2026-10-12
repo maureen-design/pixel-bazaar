@@ -50,8 +50,9 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
   useEffect(() => {
     supabase
       .from('products')
-      .select('id, name, images, price, rating, vendor:vendors(store_name, country)')
+      .select('id, name, images, price, rating, vendor:vendors!inner(store_name, country)')
       .eq('status', 'active')
+      .eq('vendor.is_verified', true)
       .not('images', 'is', null)
       .order('rating', { ascending: false })
       .limit(10)
@@ -139,6 +140,15 @@ export function Hero({ userName, isLoggedIn }: HeroProps) {
                 >
                   Browse Products
                 </motion.button>
+              </div>
+              <div className="mt-2">
+                <Link
+                  to="/vendor/apply"
+                  className="inline-flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Sell on NexaMart
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
             </motion.div>
 

@@ -29,6 +29,7 @@ export function useProducts() {
             )
           `)
           .eq('status', 'active')
+          .eq('vendor.is_verified', true)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -81,7 +82,8 @@ export function useFeaturedProducts(categoryId?: string | null, page: number = 1
               slug
             )
           `, { count: 'exact' })
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .eq('vendor.is_verified', true);
 
         if (categoryId) {
           query = query.eq('category_id', categoryId);
@@ -156,7 +158,8 @@ export function useNewArrivals(categoryId?: string | null, page: number = 1, lim
               slug
             )
           `, { count: 'exact' })
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .eq('vendor.is_verified', true);
 
         if (categoryId) {
           query = query.eq('category_id', categoryId);
@@ -217,6 +220,7 @@ export function useProduct(id: string) {
             )
           `)
           .eq('id', id)
+          .eq('vendor.is_verified', true)
           .single();
 
         if (error) throw error;
@@ -283,7 +287,8 @@ export function useCompareProducts(searchTerm: string, selectedIds: string[], li
         let query = supabase
           .from('products')
           .select(baseSelect)
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .eq('vendor.is_verified', true);
 
         if (term) {
           query = query.ilike('name', `%${term}%`);
@@ -301,7 +306,8 @@ export function useCompareProducts(searchTerm: string, selectedIds: string[], li
             .from('products')
             .select(baseSelect)
             .in('id', selectedIds)
-            .eq('status', 'active');
+            .eq('status', 'active')
+            .eq('vendor.is_verified', true);
           if (idError) throw idError;
           selectedProducts.push(...(byIds || []).map(mapProductImages));
         }
@@ -347,6 +353,7 @@ export function usePopularPicks(limit = 8) {
             category:categories!inner (id, name, slug)
           `)
           .eq('status', 'active')
+          .eq('vendor.is_verified', true)
           .gt('rating', 0)
           .order('rating', { ascending: false })
           .order('created_at', { ascending: false })

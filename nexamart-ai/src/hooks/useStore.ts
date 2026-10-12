@@ -88,6 +88,7 @@ export function useStore(id: string) {
           .select(PRODUCT_SELECT)
           .eq('vendor_id', id)
           .eq('status', 'active')
+          .eq('vendor.is_verified', true)
           .order('created_at', { ascending: false });
 
         if (productError) throw productError;
