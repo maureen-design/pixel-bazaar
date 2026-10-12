@@ -53,7 +53,7 @@ export function VariantSelector({ variants, selectedAttributes, onSelect }: Vari
         const selectedValue = selectedAttributes[option.name];
         const availableCount = option.values.filter((value) => isValueAvailable(option.name, value)).length;
         return (
-          <div key={option.name}>
+          <div key={option.name} role="group" aria-label={option.label}>
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-secondary-foreground">
                 {option.label}:

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingCart, ArrowRight, Truck, AlertTriangle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -15,6 +16,15 @@ export function Cart() {
   const { user } = useAuth();
   const { settings } = useSettings();
   const { report: stockReport, checking: checkingStock } = useCartStockValidation(cartItems);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Removing a row unmounts the button that was focused, which otherwise drops
+  // focus to <body>. Move it to the page heading first, and let the cart's
+  // "Removed from cart" toast (a live region) carry the spoken confirmation.
+  const handleRemoveItem = (item: (typeof cartItems)[number]) => {
+    headingRef.current?.focus();
+    void removeFromCart(item.id);
+  };
 
   const issueForItem = (itemId: string) => stockReport.issues.find((issue) => issue.cartItemId === itemId);
   const noticeForItem = (itemId: string) => stockReport.notices.find((notice) => notice.cartItemId === itemId);
@@ -66,7 +76,7 @@ export function Cart() {
       <Navbar />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-3xl font-bold mb-8">Shopping Cart</h1>
+        <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-bold mb-8 outline-none">Shopping Cart</h1>
 
         {!user && cartItems.length > 0 && (
           <p className="text-sm text-muted-foreground -mt-6 mb-6">
@@ -157,7 +167,7 @@ export function Cart() {
                           </p>
                         </div>
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => handleRemoveItem(item)}
                           aria-label={`Remove ${item.products?.name || 'item'} from cart`}
                           className="text-muted-foreground hover:text-destructive transition-colors"
                         >
@@ -268,7 +278,7 @@ export function Cart() {
                   <div className="border-t border-border pt-4">
                     <div className="flex justify-between">
                       <span className="text-foreground font-semibold">Estimated Total</span>
-                      <span className="text-foreground font-bold text-xl">{formatPrice(total)}</span>
+                      <span className="text-foreground font-bold text-xl" aria-live="polite">{formatPrice(total)}</span>
                     </div>
                   </div>
                 </div>

@@ -9,25 +9,40 @@ import { checkRateLimit, getRemainingAttempts } from '../../lib/rateLimit';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const { resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rateLimitKey = `forgot:${email.toLowerCase()}`;
+    setFormError('');
+
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailError('Email is required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    setEmailError('');
+
+    const rateLimitKey = `forgot:${trimmed.toLowerCase()}`;
     if (!checkRateLimit(rateLimitKey, 3, 300000)) { // 3 attempts per 5 minutes
       const remaining = getRemainingAttempts(rateLimitKey, 3);
-      toast.error(`Too many requests. Please try again later. (${remaining} attempts remaining)`);
+      setFormError(`Too many requests. Please try again later. (${remaining} attempts remaining)`);
       return;
     }
     setLoading(true);
     try {
-      await resetPassword(email);
+      await resetPassword(trimmed);
       setSent(true);
       toast.success('Password reset email sent!');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send reset email');
+      setFormError(error.message || 'Failed to send reset email');
     } finally {
       setLoading(false);
     }
@@ -56,12 +71,18 @@ export function ForgotPassword() {
           type="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); setEmailError(''); setFormError(''); }}
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
+          error={emailError}
           required
         />
+        {formError && (
+          <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {formError}
+          </div>
+        )}
         <Button type="submit" className="w-full" loading={loading}>
           Send Reset Link
         </Button>

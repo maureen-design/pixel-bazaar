@@ -168,6 +168,7 @@ export function AISearchBar() {
           <input
             ref={inputRef}
             type="text"
+            aria-label={aiMode ? 'Ask AI to search products' : 'Search products'}
             placeholder={aiMode ? 'Ask AI to find what you need…' : 'Search products by name or type…'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}

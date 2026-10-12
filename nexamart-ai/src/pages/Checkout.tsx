@@ -598,6 +598,7 @@ export function Checkout() {
             <div key={s} className="flex items-center gap-2">
               <button
                 onClick={() => i < stepIndex ? setStep(s) : undefined}
+                aria-current={i === stepIndex ? 'step' : undefined}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   i === stepIndex ? 'bg-primary text-primary-foreground' :
                   i < stepIndex ? 'bg-primary/10 text-primary cursor-pointer' :
@@ -744,9 +745,11 @@ export function Checkout() {
                 {settings.bankPayLaterEnabled && (
                 <div className="bg-card rounded-xl p-6 border border-border">
                   <h2 className="text-xl font-semibold mb-4">Payment Type</h2>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Payment type">
                     <button
                       type="button"
+                      role="radio"
+                      aria-checked={paymentType === 'now'}
                       onClick={() => setPaymentType('now')}
                       className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
                         paymentType === 'now' ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground'
@@ -761,6 +764,8 @@ export function Checkout() {
                     </button>
                     <button
                       type="button"
+                      role="radio"
+                      aria-checked={paymentType === 'later'}
                       onClick={() => setPaymentType('later')}
                       className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
                         paymentType === 'later' ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground'

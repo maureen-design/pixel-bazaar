@@ -136,7 +136,7 @@ export function SearchFilters({
   return (
     <div className="bg-card border border-border rounded-xl p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-foreground font-semibold text-lg">Filters</h3>
+        <h2 className="text-foreground font-semibold text-lg">Filters</h2>
         {hasFilters && (
           <button
             onClick={onClear}

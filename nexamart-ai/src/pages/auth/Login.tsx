@@ -16,6 +16,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [formError, setFormError] = useState('');
   const { signIn } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
 
     const result = loginSchema.safeParse({ email, password });
     if (!result.success) {
@@ -43,7 +45,7 @@ export function Login() {
     const rateLimitKey = `login:${email.toLowerCase()}`;
     if (!checkRateLimit(rateLimitKey, 5, 60000)) {
       const remaining = getRemainingAttempts(rateLimitKey, 5);
-      toast.error(`Too many attempts. Please try again in a minute. (${remaining} attempts remaining)`);
+      setFormError(`Too many attempts. Please try again in a minute. (${remaining} attempts remaining)`);
       return;
     }
     setLoading(true);
@@ -52,7 +54,7 @@ export function Login() {
       toast.success(isCheckoutIntent ? "You're almost there — finishing your purchase!" : 'Welcome back!');
       navigate(next);
     } catch (error: any) {
-      toast.error(error.message || 'Invalid email or password');
+      setFormError(error.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -103,6 +105,11 @@ export function Login() {
             Forgot password?
           </Link>
         </div>
+        {formError && (
+          <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {formError}
+          </div>
+        )}
         <Button type="submit" className="w-full" loading={loading}>
           Sign In
         </Button>

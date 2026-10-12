@@ -227,6 +227,20 @@ useEffect(() => {
   const isOutOfStock = selectionReady ? stockState === 'out_of_stock' : false;
   const isLowStock = selectionReady && stockState === 'low';
 
+  // Announced via a scoped live region so screen-reader users hear the current
+  // selection, the resulting price and stock — none of which should rely on the
+  // colour-only cues on the swatches/pills or the visual price swap.
+  const variantAnnouncement = (() => {
+    if (!hasVariants) return '';
+    const entries = Object.entries(selectedAttributes);
+    if (entries.length === 0) return '';
+    const selection = entries.map(([key, value]) => `${key} ${value}`).join(', ');
+    if (!selectionReady) return `Selected ${selection}. Choose the remaining options.`;
+    if (isOutOfStock) return `Selected ${selection}. Out of stock.`;
+    const stockText = isLowStock ? `Only ${effectiveStock} left` : `${effectiveStock ?? 0} in stock`;
+    return `Selected ${selection}. Price ${formatPrice(effectivePrice)}. ${stockText}.`;
+  })();
+
   // Color-driven gallery resolution
   const selectedColor =
     selectedAttributes.color ??
@@ -369,24 +383,29 @@ useEffect(() => {
 
             {/* Variant Selector */}
             {hasVariants && (
-              <VariantSelector
-                variants={product.variants!}
-                selectedAttributes={selectedAttributes}
-                onSelect={(attributes) => {
-                  setSelectedAttributes(attributes);
-                  setSelectedImage(0);
-                  // Clamp the quantity to the newly selected combination's
-                  // available stock so stale quantities can never exceed it.
-                  const combo = product.variants!.combinations.find((combination) =>
-                    Object.entries(attributes).every(
-                      ([key, val]) => combination.attributes[key] === val
-                    )
-                  );
-                  if (combo) {
-                    setQuantity((q) => Math.min(q, Math.max(1, combo.stock)));
-                  }
-                }}
-              />
+              <>
+                <p className="sr-only" role="status" aria-live="polite">
+                  {variantAnnouncement}
+                </p>
+                <VariantSelector
+                  variants={product.variants!}
+                  selectedAttributes={selectedAttributes}
+                  onSelect={(attributes) => {
+                    setSelectedAttributes(attributes);
+                    setSelectedImage(0);
+                    // Clamp the quantity to the newly selected combination's
+                    // available stock so stale quantities can never exceed it.
+                    const combo = product.variants!.combinations.find((combination) =>
+                      Object.entries(attributes).every(
+                        ([key, val]) => combination.attributes[key] === val
+                      )
+                    );
+                    if (combo) {
+                      setQuantity((q) => Math.min(q, Math.max(1, combo.stock)));
+                    }
+                  }}
+                />
+              </>
             )}
 
             {/* Vendor Info */}

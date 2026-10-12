@@ -148,6 +148,7 @@ export function Navbar() {
               <input
                 ref={desktopInputRef}
                 type="text"
+                aria-label={desktopAiMode ? 'Ask AI to search products' : 'Search products'}
                 placeholder={desktopAiMode ? 'Ask AI to find what you need...' : 'Search products...'}
                 value={desktopQuery}
                 onChange={(e) => setDesktopQuery(e.target.value)}

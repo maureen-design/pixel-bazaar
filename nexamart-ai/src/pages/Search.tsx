@@ -138,13 +138,13 @@ export function Search() {
                   'Search Products'
                 )}
               </h1>
-              {(query || vendorId) && !loading && (
-                <p className="text-muted-foreground">
-                  {totalCount === 0
+              <p className="text-muted-foreground" role="status">
+                {!loading && (query || vendorId)
+                  ? totalCount === 0
                     ? 'No products found'
-                    : `Showing ${totalCount} result${totalCount !== 1 ? 's' : ''}`}
-                </p>
-              )}
+                    : `Showing ${totalCount} result${totalCount !== 1 ? 's' : ''}`
+                  : ''}
+              </p>
             </div>
             <Button variant="outline" onClick={() => setShowAIAssistant(true)} className="gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
@@ -222,7 +222,8 @@ export function Search() {
           </div>
 
           {/* Results */}
-          <div className="flex-1 min-w-0" aria-live="polite">
+          <section className="flex-1 min-w-0" aria-busy={loading} aria-labelledby="search-results-heading">
+            <h2 id="search-results-heading" className="sr-only">Results</h2>
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {Array.from({ length: 8 }).map((_, i) => (
@@ -308,7 +309,7 @@ export function Search() {
                 )}
               </>
             )}
-          </div>
+          </section>
         </div>
       </div>
       <ShoppingAssistantModal open={showAIAssistant} onOpenChange={setShowAIAssistant} initialCategoryId={categoryId} />

@@ -23,6 +23,7 @@ export function Signup() {
   // state rather than a toast so the user gets two working exits instead of a
   // dead end.
   const [duplicateEmail, setDuplicateEmail] = useState(false);
+  const [formError, setFormError] = useState('');
   const { signUp } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -64,12 +65,13 @@ export function Signup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDuplicateEmail(false);
+    setFormError('');
     if (!validate()) return;
 
     const rateLimitKey = `signup:${email.trim().toLowerCase()}`;
     if (!checkRateLimit(rateLimitKey, 3, 300000)) { // 3 attempts per 5 minutes for signup
       const remaining = getRemainingAttempts(rateLimitKey, 3);
-      toast.error(`Too many signup attempts. Please try again later. (${remaining} attempts remaining)`);
+      setFormError(`Too many signup attempts. Please try again later. (${remaining} attempts remaining)`);
       return;
     }
 
@@ -93,7 +95,7 @@ export function Signup() {
       if (lower.includes('already registered') || lower.includes('already been registered')) {
         setDuplicateEmail(true);
       } else {
-        toast.error(message);
+        setFormError(message);
       }
     } finally {
       setLoading(false);
@@ -192,6 +194,11 @@ export function Signup() {
           required
         />
         {password && <PasswordRequirements value={password} />}
+        {formError && (
+          <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {formError}
+          </div>
+        )}
         {isCheckoutIntent && (
           <p className="text-xs text-muted-foreground">
             Your cart will be waiting for you — create your account and we'll continue right to

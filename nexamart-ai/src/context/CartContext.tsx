@@ -284,11 +284,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromCart = async (itemId: string) => {
+    // Capture the item so the confirmation can offer a one-tap Undo. addToCart
+    // is declared above, so re-adding the same product/variant rebuilds the row.
+    const removed = cartItems.find((item) => item.id === itemId);
+    const undoAction = removed
+      ? {
+          action: {
+            label: 'Undo',
+            onClick: () =>
+              addToCart(
+                removed.product_id,
+                removed.quantity,
+                removed.variant_id,
+                removed.variant_attributes,
+                removed.variant_price,
+                removed.products
+              ),
+          },
+        }
+      : undefined;
+
     if (!user) {
       const nextItems = loadGuestCart().filter((item) => item.id !== itemId);
       saveGuestCart(nextItems);
       setCartItems(nextItems);
-      toast.success('Removed from cart');
+      toast.success('Removed from cart', undoAction);
       return;
     }
 
@@ -300,7 +320,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
       await fetchCart();
-      toast.success('Removed from cart');
+      toast.success('Removed from cart', undoAction);
     } catch (error: any) {
       toast.error(error.message || 'Failed to remove item');
     }

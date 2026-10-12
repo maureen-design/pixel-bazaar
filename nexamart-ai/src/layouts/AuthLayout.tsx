@@ -31,10 +31,10 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
         transition={{ duration: 0.5 }}
       >
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
+          <div className="text-4xl font-extrabold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent">
             {settings.siteName}
-          </h1>
-          <h2 className="text-2xl font-bold text-foreground mt-4">{title}</h2>
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mt-4">{title}</h1>
           {subtitle && <p className="text-muted-foreground mt-1">{subtitle}</p>}
         </div>
         {children}
