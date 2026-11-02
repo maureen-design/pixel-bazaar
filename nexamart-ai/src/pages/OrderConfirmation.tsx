@@ -8,6 +8,8 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { CardPaymentForm } from '../components/checkout/CardPaymentForm';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { formatShippingAddress, addBusinessDays } from '../utils/formatUtils';
@@ -64,6 +66,11 @@ export function OrderConfirmation() {
   const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error' | 'cancelled' | 'failed' | 'pending'>('idle');
   const [paying, setPaying] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cancel order state
+  const [cancelDialog, setCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
@@ -263,6 +270,41 @@ export function OrderConfirmation() {
         return `Ready by ${formatDateShort(addBusinessDays(created, 1))}`;
       default:
         return `${formatDateShort(addBusinessDays(created, 3))} - ${formatDateShort(addBusinessDays(created, 5))}`;
+    }
+  };
+
+  // Eligibility rule: unpaid and within 30 minutes of creation, not in terminal state
+  const isEligibleForCancel = () => {
+    if (!order) return false;
+    if (order.status === 'cancelled' || order.status === 'delivered' || order.status === 'processing') return false;
+    if (order.payment_status === 'paid' || order.payment_status === 'refunded') return false;
+    const minutesElapsed = (Date.now() - new Date(order.created_at).getTime()) / (1000 * 60);
+    return minutesElapsed <= 30;
+  };
+
+  const handleCancelOrder = async () => {
+    if (!order) return;
+    setCancelling(true);
+    try {
+      const { data, error } = await supabase.rpc('customer_cancel_order', {
+        p_order_id: order.id,
+        p_reason: cancelReason.trim() || null,
+      });
+
+      if (error) throw error;
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to cancel order');
+      }
+
+      toast.success('Order cancelled successfully');
+      setCancelDialog(false);
+      setCancelReason('');
+      fetchOrder();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel order');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -651,6 +693,11 @@ export function OrderConfirmation() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4">
+          {isEligibleForCancel() && (
+            <Button variant="destructive" onClick={() => setCancelDialog(true)} className="w-full sm:w-auto">
+              Cancel Order
+            </Button>
+          )}
           <Link to="/" className="flex-1">
             <Button className="w-full">
               <ShoppingBag className="h-4 w-4 mr-2" />
@@ -665,6 +712,45 @@ export function OrderConfirmation() {
           </Link>
         </div>
       </motion.div>
+
+      {/* Cancel Order Dialog */}
+      <Dialog open={cancelDialog} onOpenChange={(open) => { if (!open) { setCancelDialog(false); setCancelReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Order #{order?.order_number}</DialogTitle>
+            <DialogDescription>
+              Provide a reason for cancellation (optional). This will be included in the email sent to you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label htmlFor="cancel-reason">Reason (optional)</Label>
+              <textarea
+                id="cancel-reason"
+                value={cancelReason}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCancelReason(e.target.value)}
+                placeholder="e.g., Changed my mind, found a better price, etc."
+                rows={3}
+                maxLength={500}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+              <p className="text-xs text-muted-foreground mt-1">{cancelReason.length}/500</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setCancelDialog(false); setCancelReason(''); }} disabled={cancelling}>
+                Keep Order
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel Order'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
