@@ -15,6 +15,7 @@ import { SafeImg } from '../components/SafeImg';
 import { OrderTimeline, OrderCancelledNotice } from '../components/OrderTimeline';
 import { formatBankAccount } from '../lib/formatBankAccount';
 import { formatPrice } from '../config/pricing';
+import { SpeakButton } from '../components/ui/SpeakButton';
 
 interface OrderItem {
   id: string;
@@ -584,7 +585,14 @@ export function OrderConfirmation() {
 
         {/* Order Items */}
         <div className="bg-card border border-border rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Order Summary</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
+            <SpeakButton
+              text={`Order ${order.order_number}. ${order.items.length} item${order.items.length !== 1 ? 's' : ''}. Total ${formatPrice(order.total_amount)}. ${order.status}. ${order.payment_status}.`}
+              label="Read order summary"
+              className="text-sm"
+            />
+          </div>
           <div className="space-y-4">
             {order.items.map((item) => (
               <div key={item.id} className="flex items-center gap-4 py-3 border-b border-border last:border-0">

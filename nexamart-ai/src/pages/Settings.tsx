@@ -17,7 +17,7 @@ import {
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
-import { Sun, Moon, Bell, UserCircle, Eye, Type } from 'lucide-react';
+import { Sun, Moon, Bell, UserCircle, Eye, Type, Volume2 } from 'lucide-react';
 
 export function Settings() {
   const { user, profile } = useAuth();
@@ -36,6 +36,7 @@ export function Settings() {
     push: true,
     sms: false,
   });
+  const [speechRate, setSpeechRate] = useState(1);
 
   useEffect(() => {
     if (profile) {
@@ -46,6 +47,11 @@ export function Settings() {
     setIsDark(savedTheme !== 'light');
     setIsHighContrast(document.documentElement.classList.contains('high-contrast'));
     setIsLargeText(document.documentElement.classList.contains('text-scale-large'));
+    const savedRate = localStorage.getItem('nexamart-speech-rate');
+    if (savedRate) {
+      const rate = Number(savedRate);
+      if ([0.5, 0.75, 1, 1.25, 1.5].includes(rate)) setSpeechRate(rate);
+    }
   }, [profile]);
 
   const handleProfileUpdate = async () => {
@@ -159,6 +165,11 @@ export function Settings() {
       localStorage.setItem('text-scale-large', 'true');
       setIsLargeText(true);
     }
+  };
+
+  const handleSpeechRateChange = (rate: number) => {
+    setSpeechRate(rate);
+    localStorage.setItem('nexamart-speech-rate', String(rate));
   };
 
   return (
@@ -386,6 +397,46 @@ export function Settings() {
                 Current: {isDark ? 'Dark' : 'Light'} mode
                 {isHighContrast ? ' · High contrast' : ''}
                 {isLargeText ? ' · Large text' : ''}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Separator className="my-6" />
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-primary" />
+                Speech Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { value: 0.5, label: 'Slower' },
+                  { value: 0.75, label: 'Slow' },
+                  { value: 1, label: 'Normal' },
+                  { value: 1.25, label: 'Fast' },
+                  { value: 1.5, label: 'Faster' },
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handleSpeechRateChange(value)}
+                    aria-label={label}
+                    aria-pressed={speechRate === value}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-all ${
+                      speechRate === value
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-card border-border hover:border-muted-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Controls the speed of text-to-speech for "Listen" buttons. Current: {speechRate}x
               </p>
             </CardContent>
           </Card>

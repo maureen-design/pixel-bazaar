@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { Button } from './button';
 
@@ -6,11 +6,26 @@ interface SpeakButtonProps {
   text: string;
   className?: string;
   label?: string;
+  rate?: number;
 }
 
-export function SpeakButton({ text, className, label = 'Read aloud' }: SpeakButtonProps) {
+const SPEECH_RATE_KEY = 'nexamart-speech-rate';
+
+function getSpeechRate(): number {
+  try {
+    const saved = localStorage.getItem(SPEECH_RATE_KEY);
+    if (saved) {
+      const rate = Number(saved);
+      if ([0.5, 0.75, 1, 1.25, 1.5].includes(rate)) return rate;
+    }
+  } catch {}
+  return 1;
+}
+
+export function SpeakButton({ text, className, label = 'Read aloud', rate: propRate }: SpeakButtonProps) {
   const [speaking, setSpeaking] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const rate = propRate ?? getSpeechRate();
 
   const handleSpeak = useCallback(() => {
     if (!text) return;
@@ -22,7 +37,7 @@ export function SpeakButton({ text, className, label = 'Read aloud' }: SpeakButt
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
+    utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 1;
 
@@ -32,7 +47,14 @@ export function SpeakButton({ text, className, label = 'Read aloud' }: SpeakButt
     utteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
     setSpeaking(true);
-  }, [text, speaking]);
+  }, [text, speaking, rate]);
+
+  // Cancel speech on unmount/navigation
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   if (!text) return null;
 
