@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Shield, ShoppingCart, RefreshCw, AlertTriangle } from 'lucide-react';
+import { CreditCard, Smartphone, Building2, Check, Tag, Loader2, Phone, ArrowRight, ArrowLeft, Clock, Shield, ShoppingCart, RefreshCw, AlertTriangle, MapPin, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ import type { CartStockReport } from '../lib/cartStock';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
+import { Label } from '../components/ui/label';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { toast } from 'sonner';
@@ -77,6 +78,11 @@ export function Checkout() {
   const stockIssues = (submitStockReport ?? stockReport).issues;
   const stockNotices = (submitStockReport ?? stockReport).notices;
 
+  // Saved addresses state
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [saveAddress, setSaveAddress] = useState(false);
+
   const [orderCreated, setOrderCreated] = useState<any>(null);
   const [mpesaPhone, setMpesaPhone] = useState(profile?.phone || '');
   const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error' | 'cancelled' | 'failed' | 'pending'>('idle');
@@ -105,6 +111,38 @@ export function Checkout() {
       return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
     }
   }, [resendCooldown > 0]);
+
+  // Fetch saved addresses
+  useEffect(() => {
+    if (user) {
+      const fetchAddresses = async () => {
+        const { data, error } = await supabase
+          .from('addresses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Error fetching addresses:', error);
+        } else {
+          setAddresses(data || []);
+          // Preselect default address if available
+          const defaultAddr = data?.find((a: any) => a.is_default);
+          if (defaultAddr) {
+            setSelectedAddressId(defaultAddr.id);
+            setFormData({
+              full_name: defaultAddr.full_name,
+              phone: defaultAddr.phone,
+              address: defaultAddr.address_line,
+              city: defaultAddr.city,
+              county: defaultAddr.county,
+            });
+          }
+        }
+      };
+      fetchAddresses();
+    }
+  }, [user]);
 
   if (!settingsLoading) {
     if (deliveryMethod === 'express' && !settings.expressEnabled) setDeliveryMethod('standard');
@@ -184,6 +222,28 @@ export function Checkout() {
 
   const removeCoupon = () => { setAppliedCoupon(null); setCouponCode(''); setCouponError(''); };
 
+  const handleSelectAddress = (address: any) => {
+    setSelectedAddressId(address.id);
+    setFormData({
+      full_name: address.full_name,
+      phone: address.phone,
+      address: address.address_line,
+      city: address.city,
+      county: address.county,
+    });
+  };
+
+  const handleClearAddress = () => {
+    setSelectedAddressId(null);
+    setFormData({
+      full_name: profile?.full_name || '',
+      phone: profile?.phone || '',
+      address: '',
+      city: '',
+      county: '',
+    });
+  };
+
   const goToStep = (s: Step) => {
     if (s === 'Payment') {
       const errs = validateForm();
@@ -238,6 +298,9 @@ export function Checkout() {
     setLoading(true);
 
     try {
+      // Save address if checkbox is checked (non-blocking)
+      await handleSaveAddressOnOrder();
+
       const order = await createOrder(
         cartItems, formData, selectedPayment,
         appliedCoupon?.code, deliveryMethod, paymentType,
@@ -392,6 +455,59 @@ export function Checkout() {
   const handleCityChange = (value: string) => {
     setFormData(prev => ({ ...prev, city: value }));
     setErrors(prev => ({ ...prev, city: '' }));
+  };
+
+  // Save address on order placement
+  const handleSaveAddressOnOrder = async () => {
+    if (!user || !saveAddress) return;
+    if (addresses.length >= 5) {
+      toast.error('Maximum 5 addresses reached. Cannot save this address.');
+      return;
+    }
+
+    // Check for duplicate (ignore postal_code since ShippingAddress doesn't have it)
+    const isDuplicate = addresses.some((addr: any) =>
+      addr.full_name === formData.full_name &&
+      addr.phone === formData.phone &&
+      addr.address_line === formData.address &&
+      addr.city === formData.city &&
+      addr.county === formData.county
+    );
+
+    if (isDuplicate) {
+      toast.info('This address is already saved.');
+      return;
+    }
+
+    try {
+      // Unset other defaults if setting as default
+      const { error: unsetError } = await supabase
+        .from('addresses')
+        .update({ is_default: false })
+        .eq('user_id', user.id)
+        .eq('is_default', true);
+
+      if (unsetError) console.error('Error unsetting default:', unsetError);
+
+      const { error } = await supabase
+        .from('addresses')
+        .insert({
+          user_id: user.id,
+          full_name: formData.full_name,
+          phone: formData.phone,
+          address_line: formData.address,
+          city: formData.city,
+          county: formData.county,
+          postal_code: null, // ShippingAddress doesn't include postal_code
+          is_default: addresses.length === 0, // Make default if it's the first address
+        });
+
+      if (error) throw error;
+      toast.success('Address saved successfully');
+    } catch (error: any) {
+      console.error('Error saving address:', error);
+      // Don't block order placement if address save fails
+    }
   };
 
   // M-Pesa Payment Screen
@@ -618,6 +734,46 @@ export function Checkout() {
             {/* Step 1: Shipping + Delivery */}
             {step === 'Shipping' && (
               <div className="space-y-6">
+                {/* Saved Addresses Selector (for logged-in users) */}
+                {user && addresses.length > 0 && (
+                  <div className="bg-card rounded-xl p-6 border border-border">
+                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-primary" />
+                      Saved Addresses
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {addresses.map((address) => (
+                        <button
+                          key={address.id}
+                          type="button"
+                          onClick={() => handleSelectAddress(address)}
+                          className={`p-4 border rounded-lg text-left transition-all ${
+                            selectedAddressId === address.id
+                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                              : 'border-border hover:border-muted-foreground'
+                          }`}
+                        >
+                          {address.is_default && (
+                            <div className="flex items-center gap-1 text-primary text-xs font-medium mb-2">
+                              <Plus className="w-3 h-3" />
+                              Default
+                            </div>
+                          )}
+                          <p className="font-medium text-sm">{address.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{address.phone}</p>
+                          <p className="text-xs text-muted-foreground truncate">{address.address_line}</p>
+                          <p className="text-xs text-muted-foreground">{address.city}, {address.county}</p>
+                        </button>
+                      ))}
+                    </div>
+                    {selectedAddressId && (
+                      <Button variant="ghost" size="sm" onClick={handleClearAddress} className="mt-2">
+                        Clear selection
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-card rounded-xl p-6 border border-border">
                   <h2 className="text-xl font-semibold mb-6">Shipping Address</h2>
                   <div className="space-y-4">
@@ -676,6 +832,24 @@ export function Checkout() {
                     </div>
                   </div>
                 </div>
+
+                {/* Save address checkbox (logged-in users only) */}
+                {user && (
+                  <div className="flex items-center gap-2 mt-4">
+                    <input
+                      type="checkbox"
+                      id="save-address"
+                      checked={saveAddress}
+                      onChange={(e) => setSaveAddress(e.target.checked)}
+                      disabled={addresses.length >= 5}
+                      className="w-4 h-4 rounded border-border"
+                    />
+                    <Label htmlFor="save-address" className="text-sm">
+                      Save this address to my address book
+                      {addresses.length >= 5 && ' (maximum 5 addresses reached)'}
+                    </Label>
+                  </div>
+                )}
 
                 <div className="bg-card rounded-xl p-6 border border-border">
                   <h2 className="text-xl font-semibold mb-6">Delivery Method</h2>
