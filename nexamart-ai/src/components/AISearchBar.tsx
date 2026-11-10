@@ -7,19 +7,26 @@ import { toast } from 'sonner';
 const REGULAR_EXAMPLES = ['Black shoes', 'Laptops', "Men's jackets"];
 const AI_EXAMPLES = ['Black shoes under KES 5,000', 'Wireless headphones', "Men's jackets"];
 
-// Feature detection for SpeechRecognition
-const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-const sttSupported = !!SpeechRecognition;
-
 export function AISearchBar() {
   const [query, setQuery] = useState('');
   const [aiMode, setAiMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [sttSupported, setSttSupported] = useState(false);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
+
+  // Feature detection for SpeechRecognition (client-side only)
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const supported = !!SpeechRecognition;
+    speechRecognitionRef.current = SpeechRecognition;
+    setSttSupported(supported);
+    console.log('[Voice Search] STT supported:', supported);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -46,13 +53,13 @@ export function AISearchBar() {
   };
 
   const startListening = () => {
-    if (!sttSupported) {
+    if (!sttSupported || !speechRecognitionRef.current) {
       toast.error('Voice search is not supported in this browser');
       return;
     }
 
     if (!recognitionRef.current) {
-      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current = new speechRecognitionRef.current();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
