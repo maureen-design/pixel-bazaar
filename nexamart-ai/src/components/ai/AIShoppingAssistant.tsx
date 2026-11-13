@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { ShoppingAssistantModal } from './ShoppingAssistantModal';
-import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
 
 interface AIShoppingAssistantProps {
@@ -10,7 +9,6 @@ interface AIShoppingAssistantProps {
 }
 
 export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }: AIShoppingAssistantProps) {
-  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
   const handleClick = () => setOpen(true);
