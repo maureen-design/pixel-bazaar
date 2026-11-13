@@ -6,6 +6,7 @@ import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CompareProvider } from './context/CompareContext';
 import { CompareBar } from './components/CompareBar';
+import { GuestAIRegistrationPrompt } from './components/GuestAIRegistrationPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { VendorProtectedRoute } from './components/VendorProtectedRoute';
@@ -94,6 +95,7 @@ function App() {
           <ScrollToTop />
           <Toaster position="top-right" richColors />
           <CompareBar />
+          <GuestAIRegistrationPrompt />
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-card focus:text-foreground focus:px-4 focus:py-2 focus:rounded-lg focus:ring-2 focus:ring-primary"
