@@ -46,7 +46,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_today date := (now() at time zone 'UTC')::date;
+  v_today date := (now() at time zone 'Africa/Nairobi')::date;
   v_minute timestamptz := date_trunc('minute', now());
   v_daily_count integer := 0;
   v_minute_count integer := 0;
@@ -65,6 +65,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('nexamart-ai-global-' || v_today::text, 0));
   select coalesce(request_count, 0) into v_global_count
     from public.ai_global_daily_usage where usage_date = v_today;
+  v_global_count := coalesce(v_global_count, 0);
   if v_global_count >= p_global_daily_limit then
     return jsonb_build_object('allowed', false, 'reason', 'global_limit');
   end if;
@@ -76,6 +77,7 @@ begin
     select coalesce(request_count, 0) into v_daily_count
       from public.ai_request_daily_usage
       where usage_date = v_today and user_id = p_user_id;
+    v_daily_count := coalesce(v_daily_count, 0);
     if v_daily_count >= p_guest_daily_limit then
       return jsonb_build_object('allowed', false, 'reason', 'guest_daily_limit');
     end if;
@@ -83,6 +85,7 @@ begin
     select coalesce(request_count, 0) into v_minute_count
       from public.ai_request_minute_usage
       where minute_bucket = v_minute and user_id = p_user_id;
+    v_minute_count := coalesce(v_minute_count, 0);
     if v_minute_count >= p_minute_limit then
       return jsonb_build_object('allowed', false, 'reason', 'guest_rate_limit');
     end if;
