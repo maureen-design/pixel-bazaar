@@ -244,10 +244,18 @@
 
 /* Accessibility: high contrast */
 .high-contrast {
-  --background: #000000 !important;
-  --foreground: #ffffff !important;
-  --surface: #1a1a1a !important;
-  --border: #ffffff !important;
+  /* Theme tokens are HSL channels and are consumed through hsl(var(...)). */
+  --background: 0 0% 0% !important;
+  --foreground: 0 0% 100% !important;
+  --surface: 0 0% 10% !important;
+  --border: 0 0% 100% !important;
+  --muted: 0 0% 12% !important;
+  --muted-foreground: 0 0% 88% !important;
+  --card: 0 0% 5% !important;
+  --card-foreground: 0 0% 100% !important;
+  --popover: 0 0% 5% !important;
+  --popover-foreground: 0 0% 100% !important;
+  --input: 0 0% 100% !important;
 }
 
 /* Accessibility: text scale */
