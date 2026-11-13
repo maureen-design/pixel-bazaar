@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
 import { ShoppingAssistantModal } from './ShoppingAssistantModal';
-import { GuestAuthPrompt } from '../GuestAuthPrompt';
 import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
 
@@ -13,28 +11,9 @@ interface AIShoppingAssistantProps {
 
 export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }: AIShoppingAssistantProps) {
   const { user } = useAuth();
-  const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [promptOpen, setPromptOpen] = useState(false);
 
-  const handleClick = () => {
-    if (!user) {
-      setPromptOpen(true);
-      return;
-    }
-    setOpen(true);
-  };
-
-  const prompt = (
-    <GuestAuthPrompt
-      open={promptOpen}
-      onOpenChange={setPromptOpen}
-      nextPath={`${location.pathname}${location.search}`}
-      title="Ask Nexa"
-      message="Create an account or sign in to use Nexa, your AI shopping assistant."
-      icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
-    />
-  );
+  const handleClick = () => setOpen(true);
 
   if (variant === 'cta') {
     return (
@@ -47,7 +26,6 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
           Ask Nexa
         </button>
         <ShoppingAssistantModal open={open} onOpenChange={setOpen} initialCategoryId={initialCategoryId} />
-        {prompt}
       </>
     );
   }
@@ -67,7 +45,6 @@ export function AIShoppingAssistant({ initialCategoryId, variant = 'floating' }:
         {open ? <X aria-hidden="true" className="w-6 h-6" /> : <Sparkles aria-hidden="true" className="w-6 h-6" />}
       </button>
       <ShoppingAssistantModal open={open} onOpenChange={setOpen} initialCategoryId={initialCategoryId} />
-      {prompt}
     </>
   );
 }
