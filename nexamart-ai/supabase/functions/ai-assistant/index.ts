@@ -63,7 +63,7 @@ async function querySupabase(path: string) {
   return response.json();
 }
 
-async function verifyAuth(authHeader: string | null): Promise<{ userId: string; email: string } | null> {
+async function verifyAuth(authHeader: string | null): Promise<{ userId: string; email: string | null; isAnonymous: boolean } | null> {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7);
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -76,10 +76,49 @@ async function verifyAuth(authHeader: string | null): Promise<{ userId: string; 
     });
     if (!resp.ok) return null;
     const user = await resp.json();
-    return { userId: user.id, email: user.email };
+    return { userId: user.id, email: user.email ?? null, isAnonymous: user.is_anonymous === true };
   } catch {
     return null;
   }
+}
+
+
+async function reserveAIRequest(userId: string, action: string, isGuest: boolean) {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) throw new Error('AI usage safeguard is not configured');
+  const globalDailyLimit = Number(Deno.env.get('AI_GLOBAL_DAILY_REQUEST_LIMIT') || 500);
+  if (!Number.isInteger(globalDailyLimit) || globalDailyLimit < 1) {
+    throw new Error('AI_GLOBAL_DAILY_REQUEST_LIMIT must be a positive integer');
+  }
+  const response = await fetch(url + '/rest/v1/rpc/reserve_ai_request', {
+    method: 'POST',
+    headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      p_user_id: userId,
+      p_action: action,
+      p_is_guest: isGuest,
+      p_guest_daily_limit: 5,
+      p_minute_limit: 3,
+      p_global_daily_limit: globalDailyLimit,
+    }),
+  });
+  if (!response.ok) throw new Error('AI usage reservation failed: ' + (await response.text()).slice(0, 200));
+  const result = await response.json();
+  if (!result?.allowed) {
+    if (result?.reason === 'guest_daily_limit') return { allowed: false, code: 'GUEST_LIMIT_REACHED' };
+    if (result?.reason === 'guest_rate_limit') return { allowed: false, code: 'RATE_LIMITED' };
+    if (result?.reason === 'global_limit') return { allowed: false, code: 'AI_TEMPORARILY_UNAVAILABLE' };
+    throw new Error('AI usage reservation was rejected');
+  }
+  return { allowed: true, guestRemaining: result.guest_remaining ?? null };
+}
+
+async function isVerifiedVendor(userId: string): Promise<boolean> {
+  const vendors: any[] = await querySupabase(
+    'vendors?select=id,is_verified&user_id=eq.' + encodeURIComponent(userId) + '&limit=1'
+  );
+  return vendors.some((vendor) => vendor.is_verified === true);
 }
 
 serve(async (req) => {
@@ -90,13 +129,81 @@ serve(async (req) => {
   try {
     const authUser = await verifyAuth(req.headers.get('Authorization'));
     if (!authUser) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const body = await req.json();
+    const action = body?.action;
+    const data = body?.data && typeof body.data === 'object' ? body.data : {};
+    const guestAllowedActions = new Set(['parse_search', 'shopping_assistant', 'explain_product', 'compare', 'compare_products']);
+
+    const customerAllowedActions = new Set([...guestAllowedActions, 'generate_description']);
+    const isUuid = (value: unknown): value is string =>
+      typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    const validOptionalText = (value: unknown, max: number) =>
+      value == null || (typeof value === 'string' && value.length <= max);
+    if (JSON.stringify(data).length > 6000) {
+      return new Response(JSON.stringify({ success: false, error: 'Request is too large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { action, data } = await req.json();
+    if (typeof action !== 'string' || !customerAllowedActions.has(action)) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid action' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'parse_search' &&
+      (typeof data.query !== 'string' || data.query.trim().length < 1 || data.query.length > 200)) {
+      return new Response(JSON.stringify({ success: false, error: 'Search query must be between 1 and 200 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'shopping_assistant' &&
+      ((data.category != null && !isUuid(data.category)) ||
+       (data.budgetMin != null && (!Number.isFinite(data.budgetMin) || data.budgetMin < 0 || data.budgetMin > 100000000)) ||
+       (data.budgetMax != null && (!Number.isFinite(data.budgetMax) || data.budgetMax < 0 || data.budgetMax > 100000000)) ||
+       !validOptionalText(data.useCase, 120) || !validOptionalText(data.priorities, 200) ||
+       !validOptionalText(data.experienceLevel, 80))) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid shopping preferences' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'explain_product' && !isUuid(data.productId)) {
+      return new Response(JSON.stringify({ success: false, error: 'A valid productId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if ((action === 'compare' || action === 'compare_products') &&
+      (!Array.isArray(data.productIds) || data.productIds.length < 2 || data.productIds.length > 3 ||
+       !data.productIds.every(isUuid) || new Set(data.productIds).size !== data.productIds.length)) {
+      return new Response(JSON.stringify({ success: false, error: 'Provide 2 or 3 distinct valid productIds' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'generate_description' &&
+      (typeof data.productName !== 'string' || data.productName.trim().length < 1 || data.productName.length > 120 ||
+       !validOptionalText(data.category, 80) || !validOptionalText(data.features, 1200) ||
+       !validOptionalText(data.audience, 120))) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid product description details' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (authUser.isAnonymous && !guestAllowedActions.has(action)) {
+      return new Response(JSON.stringify({ success: false, error: 'This AI feature requires a vendor account' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'generate_description' && (authUser.isAnonymous || !(await isVerifiedVendor(authUser.userId)))) {
+      return new Response(JSON.stringify({ success: false, error: 'Verified vendor access is required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const reservation = await reserveAIRequest(authUser.userId, action, authUser.isAnonymous);
+    if (!reservation.allowed) {
+      const isGuestLimit = reservation.code === 'GUEST_LIMIT_REACHED';
+      return new Response(JSON.stringify({
+        success: false, code: reservation.code,
+        error: isGuestLimit ? 'Create a free account to experience more of NexaMart AI assistance.' :
+          reservation.code === 'RATE_LIMITED' ? 'Please wait a moment before trying AI again.' :
+          'AI assistance is temporarily unavailable. Please try again later.'
+      }), { status: isGuestLimit ? 200 : 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const guestMaxTokens = 400;
+    const guestLimitReached = authUser.isAnonymous && reservation.guestRemaining === 0;
 
     if (action === 'parse_search') {
       const categories: any[] = await querySupabase('categories?select=slug&order=name.asc');
@@ -147,10 +254,10 @@ Query: "${data.query}"
 
       let result = '';
       try {
-        result = await callGemini(prompt);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 500);
       } catch (e: any) {
         return new Response(
-          JSON.stringify({ success: false, error: e.message }),
+          JSON.stringify({ success: false, error: e.message, guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -159,8 +266,8 @@ Query: "${data.query}"
         minPrice: null, maxPrice: null, sortBy: null, keywords: data.query,
       });
 
-      if (parsed.category && typeof parsed.category === 'string' && parsed.category.length < 36) {
-        const catResult: any[] = await querySupabase(`categories?select=id&slug=eq.${parsed.category}`);
+      if (parsed.category && typeof parsed.category === 'string' && parsed.category.length < 36 && /^[a-z0-9-]+$/i.test(parsed.category)) {
+        const catResult: any[] = await querySupabase(`categories?select=id&slug=eq.${encodeURIComponent(parsed.category)}`);
         if (catResult.length > 0) {
           parsed.category = catResult[0].id;
         } else {
@@ -169,7 +276,7 @@ Query: "${data.query}"
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: parsed }),
+        JSON.stringify({ success: true, data: parsed, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -193,13 +300,13 @@ Return only the description text, no additional commentary.
         description = await callGemini(prompt);
       } catch (e: any) {
         return new Response(
-          JSON.stringify({ success: false, error: 'AI service unavailable' }),
+          JSON.stringify({ success: false, error: 'AI service unavailable', guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: { description } }),
+        JSON.stringify({ success: true, data: { description }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -210,7 +317,7 @@ Return only the description text, no additional commentary.
       let products: any[] = [];
       try {
         let path = 'products?select=id,name,slug,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,category_id,vendor_id,categories!inner(name),vendors!inner(store_name)&status=eq.active&order=rating.desc&limit=20';
-        if (category && typeof category === 'string' && category.length < 36) {
+        if (category && typeof category === 'string' && /^[0-9a-f-]{36}$/i.test(category)) {
           path += `&category_id=eq.${category}`;
         }
         if (budgetMin) path += `&price=gte.${budgetMin}`;
@@ -222,7 +329,7 @@ Return only the description text, no additional commentary.
 
       if (products.length === 0) {
         return new Response(
-          JSON.stringify({ success: true, data: { recommendations: [], summary: 'No products matched your criteria. Try adjusting your budget or category.' } }),
+          JSON.stringify({ success: true, data: { recommendations: [], summary: 'No products matched your criteria. Try adjusting your budget or category.' }, guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -262,7 +369,7 @@ Only use product_id values that appear in the list above.`;
 
       let result = '';
       try {
-        result = await callGemini(prompt, 1000, 0.3);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 1000, 0.3);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -279,7 +386,7 @@ Only use product_id values that appear in the list above.`;
         .map((r: any) => ({ ...r, product: productMap[r.product_id] }));
 
       return new Response(
-        JSON.stringify({ success: true, data: { recommendations, summary: parsed.summary } }),
+        JSON.stringify({ success: true, data: { recommendations, summary: parsed.summary }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -331,7 +438,7 @@ Return only the plain text explanation. No extra formatting.`;
 
       let explanation = '';
       try {
-        explanation = await callGemini(prompt, 500);
+        explanation = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 500);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -340,7 +447,7 @@ Return only the plain text explanation. No extra formatting.`;
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: { explanation } }),
+        JSON.stringify({ success: true, data: { explanation }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -397,7 +504,7 @@ Only use product_id values from the list above.`;
 
       let result = '';
       try {
-        result = await callGemini(prompt, 900);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 900);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
