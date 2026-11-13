@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function GuestAIRegistrationPrompt() {
   const [visible, setVisible] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleLimit = () => setVisible(true);
@@ -12,7 +14,7 @@ export function GuestAIRegistrationPrompt() {
     return () => window.removeEventListener('nexamart:guest-ai-limit', handleLimit);
   }, []);
 
-  if (!visible) return null;
+  if (!visible || user || location.pathname === '/signup' || location.pathname === '/login') return null;
 
   const nextPath = location.pathname + location.search;
 
