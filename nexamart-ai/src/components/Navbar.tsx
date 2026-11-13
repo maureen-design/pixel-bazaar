@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { AISearchBar } from './AISearchBar';
+import { AccessibilityControls } from './AccessibilityControls';
 import { ShoppingAssistantModal } from './ai/ShoppingAssistantModal';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
@@ -176,6 +177,7 @@ export function Navbar() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-1">
+            <AccessibilityControls />
             {/* Wishlist */}
             <Link
               to="/wishlist"
