@@ -257,7 +257,7 @@ Query: "${data.query}"
         result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 500);
       } catch (e: any) {
         return new Response(
-          JSON.stringify({ success: false, error: e.message }),
+          JSON.stringify({ success: false, error: e.message, guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -300,7 +300,7 @@ Return only the description text, no additional commentary.
         description = await callGemini(prompt);
       } catch (e: any) {
         return new Response(
-          JSON.stringify({ success: false, error: 'AI service unavailable' }),
+          JSON.stringify({ success: false, error: 'AI service unavailable', guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
