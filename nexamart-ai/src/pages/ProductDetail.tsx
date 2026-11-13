@@ -3,10 +3,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
+import { invokeAIAssistant } from '../lib/aiAssistantClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
 import { ProductCard } from '../components/ProductCard';
 import { WishlistButton } from '../components/WishlistButton';
-import { GuestAuthPrompt } from '../components/GuestAuthPrompt';
 import { Button } from '../components/ui/button';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -48,7 +48,6 @@ export function ProductDetail() {
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
-  const [authPromptOpen, setAuthPromptOpen] = useState(false);
 
   // Reset variant/quantity/image state during render when the route param
 // changes, rather than in an effect. React documents this as the way to
@@ -102,19 +101,10 @@ useEffect(() => {
 
   const handleExplain = async () => {
     if (!product) return;
-    if (!user) {
-      setAuthPromptOpen(true);
-      return;
-    }
     setExplaining(true);
     setExplanation(null);
     try {
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: {
-          action: 'explain_product',
-          data: { productId: product.id },
-        },
-      });
+      const { data, error } = await invokeAIAssistant('explain_product', { productId: product.id });
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Explanation failed');
@@ -571,14 +561,7 @@ useEffect(() => {
               )}
             </div>
 
-            <GuestAuthPrompt
-              open={authPromptOpen}
-              onOpenChange={setAuthPromptOpen}
-              nextPath={id ? `/product/${id}` : '/'}
-              title="Get AI explanations"
-              message="Create an account or sign in to ask Nexa to explain products in plain language and read them aloud."
-              icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
-            />
+
 
             {/* Category */}
             {product.category && (
