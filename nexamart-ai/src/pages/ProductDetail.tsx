@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, StarHalf, Minus, Plus, Store, ArrowLeft, MessageSquare, Zap, ShoppingCart, Sparkles, Loader2, X, ArrowLeftRight, Send, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import type { ProductVariant } from '../types';
 import { supabase } from '../lib/supabaseClient';
-import { invokeAIAssistant } from '../lib/aiAssistantClient';
+import { invokeAIAssistant, isGuestAILimitError } from '../lib/aiAssistantClient';
 import { useProduct, useNewArrivals } from '../hooks/useProducts';
 import { ProductCard } from '../components/ProductCard';
 import { WishlistButton } from '../components/WishlistButton';
@@ -112,8 +112,8 @@ useEffect(() => {
       const raw = data.data.explanation || '';
       const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').replace(/^\s*[-*]\s+/gm, '');
       setExplanation(clean);
-    } catch {
-      toast.error('AI explanation unavailable. Try again later.');
+    } catch (err) {
+      if (!isGuestAILimitError(err)) toast.error('AI explanation unavailable. Try again later.');
     } finally {
       setExplaining(false);
     }
