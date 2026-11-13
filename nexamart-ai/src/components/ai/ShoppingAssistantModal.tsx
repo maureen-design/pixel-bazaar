@@ -136,7 +136,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
       const priorities = answers.values['priorities'];
       const experience = answers.values['experience'];
 
-      const { data, error } = await invokeAIAssistant('shopping_assistant', data: {
+      const { data, error } = await invokeAIAssistant('shopping_assistant', {
             category: answers.categoryId,
             useCase:
               typeof answers.values['useCase'] === 'string'
@@ -164,8 +164,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
             budgetMax: typeof budget === 'number' && budget > 0 ? budget : null,
             priorities: Array.isArray(priorities) ? priorities.join(', ') : typeof priorities === 'string' ? priorities : '',
             experienceLevel: typeof experience === 'string' ? experience : '',
-          },
-        },);
+          });
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'AI assistant failed');
