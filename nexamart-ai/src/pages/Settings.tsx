@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { Sun, Moon, Bell, UserCircle, Eye, Type, Volume2, MapPin, Plus, Trash2, Edit, Star } from 'lucide-react';
 import { KENYA_COUNTIES, getTownsForCounty } from '../data/kenya-counties';
+import { useAccessibilityPreferences } from '../hooks/useAccessibilityPreferences';
 
 export function Settings() {
   const { user, profile } = useAuth();
@@ -32,8 +33,7 @@ export function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPw, setChangingPw] = useState(false);
   const [isDark, setIsDark] = useState(true);
-  const [isHighContrast, setIsHighContrast] = useState(false);
-  const [isLargeText, setIsLargeText] = useState(false);
+  const { isHighContrast, isLargeText, toggleHighContrast, toggleLargeText } = useAccessibilityPreferences();
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -48,8 +48,6 @@ export function Settings() {
     }
     const savedTheme = localStorage.getItem('theme');
     setIsDark(savedTheme !== 'light');
-    setIsHighContrast(document.documentElement.classList.contains('high-contrast'));
-    setIsLargeText(document.documentElement.classList.contains('text-scale-large'));
     const savedRate = localStorage.getItem('nexamart-speech-rate');
     if (savedRate) {
       const rate = Number(savedRate);
@@ -141,32 +139,6 @@ export function Settings() {
       html.classList.add('dark');
       localStorage.setItem('theme', 'dark');
       setIsDark(true);
-    }
-  };
-
-  const toggleHighContrast = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('high-contrast')) {
-      html.classList.remove('high-contrast');
-      localStorage.removeItem('high-contrast');
-      setIsHighContrast(false);
-    } else {
-      html.classList.add('high-contrast');
-      localStorage.setItem('high-contrast', 'true');
-      setIsHighContrast(true);
-    }
-  };
-
-  const toggleLargeText = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('text-scale-large')) {
-      html.classList.remove('text-scale-large');
-      localStorage.removeItem('text-scale-large');
-      setIsLargeText(false);
-    } else {
-      html.classList.add('text-scale-large');
-      localStorage.setItem('text-scale-large', 'true');
-      setIsLargeText(true);
     }
   };
 
