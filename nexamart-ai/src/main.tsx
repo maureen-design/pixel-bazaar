@@ -9,6 +9,14 @@ if (localStorage.getItem('theme') !== 'light') {
   document.documentElement.classList.add('dark');
 }
 
+// Restore accessibility preferences before React renders to avoid a visual flash.
+if (localStorage.getItem('high-contrast') === 'true') {
+  document.documentElement.classList.add('high-contrast');
+}
+if (localStorage.getItem('text-scale-large') === 'true') {
+  document.documentElement.classList.add('text-scale-large');
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
