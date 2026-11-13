@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Loader2, Sparkles, RotateCcw, Check } from 'lucide-react';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { supabase } from '../../lib/supabaseClient';
+import { invokeAIAssistant } from '../../lib/aiAssistantClient';
 import { useCategories } from '../../hooks/useCategories';
 import { CategoryIcon } from '../../utils/categoryIcons';
 import { ProductRecommendationCard, type Recommendation } from './ProductRecommendationCard';
@@ -136,10 +136,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
       const priorities = answers.values['priorities'];
       const experience = answers.values['experience'];
 
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: {
-          action: 'shopping_assistant',
-          data: {
+      const { data, error } = await invokeAIAssistant('shopping_assistant', data: {
             category: answers.categoryId,
             useCase:
               typeof answers.values['useCase'] === 'string'
@@ -168,8 +165,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
             priorities: Array.isArray(priorities) ? priorities.join(', ') : typeof priorities === 'string' ? priorities : '',
             experienceLevel: typeof experience === 'string' ? experience : '',
           },
-        },
-      });
+        },);
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'AI assistant failed');
