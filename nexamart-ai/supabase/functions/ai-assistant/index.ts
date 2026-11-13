@@ -63,7 +63,7 @@ async function querySupabase(path: string) {
   return response.json();
 }
 
-async function verifyAuth(authHeader: string | null): Promise<{ userId: string; email: string } | null> {
+async function verifyAuth(authHeader: string | null): Promise<{ userId: string; email: string | null; isAnonymous: boolean } | null> {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7);
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -76,10 +76,49 @@ async function verifyAuth(authHeader: string | null): Promise<{ userId: string; 
     });
     if (!resp.ok) return null;
     const user = await resp.json();
-    return { userId: user.id, email: user.email };
+    return { userId: user.id, email: user.email ?? null, isAnonymous: user.is_anonymous === true };
   } catch {
     return null;
   }
+}
+
+
+async function reserveAIRequest(userId: string, action: string, isGuest: boolean) {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) throw new Error('AI usage safeguard is not configured');
+  const globalDailyLimit = Number(Deno.env.get('AI_GLOBAL_DAILY_REQUEST_LIMIT') || 500);
+  if (!Number.isInteger(globalDailyLimit) || globalDailyLimit < 1) {
+    throw new Error('AI_GLOBAL_DAILY_REQUEST_LIMIT must be a positive integer');
+  }
+  const response = await fetch(url + '/rest/v1/rpc/reserve_ai_request', {
+    method: 'POST',
+    headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      p_user_id: userId,
+      p_action: action,
+      p_is_guest: isGuest,
+      p_guest_daily_limit: 5,
+      p_minute_limit: 3,
+      p_global_daily_limit: globalDailyLimit,
+    }),
+  });
+  if (!response.ok) throw new Error('AI usage reservation failed: ' + (await response.text()).slice(0, 200));
+  const result = await response.json();
+  if (!result?.allowed) {
+    if (result?.reason === 'guest_daily_limit') return { allowed: false, code: 'GUEST_LIMIT_REACHED' };
+    if (result?.reason === 'guest_rate_limit') return { allowed: false, code: 'RATE_LIMITED' };
+    if (result?.reason === 'global_limit') return { allowed: false, code: 'AI_TEMPORARILY_UNAVAILABLE' };
+    throw new Error('AI usage reservation was rejected');
+  }
+  return { allowed: true };
+}
+
+async function isVerifiedVendor(userId: string): Promise<boolean> {
+  const vendors: any[] = await querySupabase(
+    'vendors?select=id,is_verified&user_id=eq.' + encodeURIComponent(userId) + '&limit=1'
+  );
+  return vendors.some((vendor) => vendor.is_verified === true);
 }
 
 serve(async (req) => {
@@ -90,13 +129,37 @@ serve(async (req) => {
   try {
     const authUser = await verifyAuth(req.headers.get('Authorization'));
     if (!authUser) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    const { action, data } = await req.json();
+    const body = await req.json();
+    const action = body?.action;
+    const data = body?.data && typeof body.data === 'object' ? body.data : {};
+    const guestAllowedActions = new Set(['parse_search', 'shopping_assistant', 'explain_product', 'compare', 'compare_products']);
+    const customerAllowedActions = new Set([...guestAllowedActions, 'generate_description']);
+    if (typeof action !== 'string' || !customerAllowedActions.has(action)) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid action' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (authUser.isAnonymous && !guestAllowedActions.has(action)) {
+      return new Response(JSON.stringify({ success: false, error: 'This AI feature requires a vendor account' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'generate_description' && (authUser.isAnonymous || !(await isVerifiedVendor(authUser.userId)))) {
+      return new Response(JSON.stringify({ success: false, error: 'Verified vendor access is required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const reservation = await reserveAIRequest(authUser.userId, action, authUser.isAnonymous);
+    if (!reservation.allowed) {
+      const isGuestLimit = reservation.code === 'GUEST_LIMIT_REACHED';
+      return new Response(JSON.stringify({
+        success: false, code: reservation.code,
+        error: isGuestLimit ? 'Create a free account to experience more of NexaMart AI assistance.' :
+          reservation.code === 'RATE_LIMITED' ? 'Please wait a moment before trying AI again.' :
+          'AI assistance is temporarily unavailable. Please try again later.'
+      }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const guestMaxTokens = 400;
 
     if (action === 'parse_search') {
       const categories: any[] = await querySupabase('categories?select=slug&order=name.asc');
@@ -147,7 +210,7 @@ Query: "${data.query}"
 
       let result = '';
       try {
-        result = await callGemini(prompt);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 500);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -262,7 +325,7 @@ Only use product_id values that appear in the list above.`;
 
       let result = '';
       try {
-        result = await callGemini(prompt, 1000, 0.3);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 1000, 0.3);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -331,7 +394,7 @@ Return only the plain text explanation. No extra formatting.`;
 
       let explanation = '';
       try {
-        explanation = await callGemini(prompt, 500);
+        explanation = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 500);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
@@ -397,7 +460,7 @@ Only use product_id values from the list above.`;
 
       let result = '';
       try {
-        result = await callGemini(prompt, 900);
+        result = await callGemini(prompt, authUser.isAnonymous ? guestMaxTokens : 900);
       } catch (e: any) {
         return new Response(
           JSON.stringify({ success: false, error: e.message }),
