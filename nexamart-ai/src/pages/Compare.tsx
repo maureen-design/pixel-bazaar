@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
-import { supabase } from '../lib/supabaseClient';
+import { invokeAIAssistant } from '../lib/aiAssistantClient';
 import { useCompareProducts } from '../hooks/useProducts';
 import type { Product } from '../types';
 import { ProductSelector } from '../components/ai/ProductSelector';
@@ -11,9 +11,7 @@ import { Loader2, Sparkles, Check, ArrowLeftRight, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatPrice } from '../config/pricing';
 import { SpeakButton } from '../components/ui/SpeakButton';
-import { GuestAuthPrompt } from '../components/GuestAuthPrompt';
 import { useCompare } from '../context/CompareContext';
-import { useAuth } from '../context/AuthContext';
 
 interface CompareResult {
   summary: string;
@@ -23,7 +21,6 @@ interface CompareResult {
 
 export function Compare() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const urlIds = searchParams.get('ids')?.split(',').filter(Boolean) || [];
   const { products: contextProducts, clearAll: clearCompareContext } = useCompare();
@@ -31,7 +28,6 @@ export function Compare() {
   const [selected, setSelected] = useState<Product[]>([]);
   const [comparing, setComparing] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
-  const [authPromptOpen, setAuthPromptOpen] = useState(false);
 
   const urlIdsKey = urlIds.join(',');
 
@@ -81,21 +77,10 @@ export function Compare() {
       toast.error('Select at least 2 products to compare');
       return;
     }
-    if (!user) {
-      setAuthPromptOpen(true);
-      return;
-    }
     setComparing(true);
     setResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: {
-          action: 'compare',
-          data: {
-            productIds: selected.map((p) => p.id),
-          },
-        },
-      });
+      const { data, error } = await invokeAIAssistant('compare', { productIds: selected.map((p) => p.id) });
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Comparison failed');
@@ -278,14 +263,7 @@ export function Compare() {
         )}
       </div>
       <Footer />
-      <GuestAuthPrompt
-        open={authPromptOpen}
-        onOpenChange={setAuthPromptOpen}
-        nextPath={`/compare?ids=${selected.map((p) => p.id).join(',')}`}
-        title="Compare with AI"
-        message="Create an account or sign in to get an AI summary of how these products differ. The specification table below stays available either way."
-        icon={<Sparkles aria-hidden="true" className="w-6 h-6 text-primary" />}
-      />
+
     </div>
   );
 }
