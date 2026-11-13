@@ -1,7 +1,7 @@
 import { useSearchParams, Link } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Sparkles, UserPlus, Package, Store, ArrowRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, Package, Store, ArrowRight } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Hero } from '../components/Hero';
@@ -27,8 +27,6 @@ export function Homepage() {
   const prefersReduced = useReducedMotion();
   const { user, profile, isVendor } = useAuth();
   const [vendorStats, setVendorStats] = useState<{ productCount: number; pendingOrders: number } | null>(null);
-  const [showSignUpPrompt, setShowSignUpPrompt] = useState(false);
-  const [hasScrolledPast, setHasScrolledPast] = useState(false);
   const [heroProductIds, setHeroProductIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortOption>('rating');
 
@@ -66,18 +64,6 @@ export function Homepage() {
         }
       });
   }, []);
-
-  const handleScroll = useCallback(() => {
-    if (!user && !hasScrolledPast && window.scrollY > 400) {
-      setHasScrolledPast(true);
-      setShowSignUpPrompt(true);
-    }
-  }, [user, hasScrolledPast]);
-
-  useEffect(() => {
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
 
   const setSelectedCategory = (categoryId: string | null) => {
     const next = new URLSearchParams();
@@ -204,29 +190,6 @@ export function Homepage() {
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
               </Link>
             )}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Visitor sign-up nudge */}
-      {!user && (
-        <motion.div
-          className="bg-gradient-to-r from-brand/5 via-transparent to-ai/5 border-y border-border"
-          initial={prefersReduced ? false : { opacity: 0 }}
-          animate={prefersReduced ? undefined : { opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm">
-            <p className="text-muted-foreground">
-              <span className="text-foreground font-medium">Join NexaMart</span> — save items, track orders, and get AI-powered recommendations.
-            </p>
-            <Link
-              to="/signup"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-brand text-white font-medium rounded-lg hover:bg-brand-dark transition-colors whitespace-nowrap"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              Sign Up Free
-            </Link>
           </div>
         </motion.div>
       )}
@@ -414,43 +377,6 @@ export function Homepage() {
       <Footer />
       <AIShoppingAssistant />
 
-      {/* Exit-intent sign-up prompt for visitors */}
-      {!user && showSignUpPrompt && (
-        <motion.div
-          className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6"
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="max-w-2xl mx-auto bg-card border border-border rounded-2xl shadow-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-brand to-brand-dark rounded-xl flex items-center justify-center flex-shrink-0">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">Create an account to save your favorites</p>
-                <p className="text-sm text-muted-foreground">Track orders, get AI recommendations, and more.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand text-white font-medium rounded-lg hover:bg-brand-dark transition-colors text-sm whitespace-nowrap"
-              >
-                Sign Up Free
-              </Link>
-              <button
-                onClick={() => setShowSignUpPrompt(false)}
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Dismiss"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      )}
     </div>
   );
 }
