@@ -11,6 +11,7 @@
 - Anonymous Auth identities are restricted from private marketplace tables and catalogue mutations. Public catalogue SELECT policies are preserved. A trigger blocks anonymous identities from calling the SECURITY DEFINER checkout flow.
 - Accessibility preferences are available from public navigation and shared with Settings; preferences are restored before first render.
 - Product-card add-to-cart actions remain visible without hover.
+- The persistent homepage signup nudge and scroll-triggered bottom prompt are removed; the Navbar still offers Sign Up, and the post-limit invitation appears only after the guest AI allowance is used.
 
 ## Required staging checks
 
