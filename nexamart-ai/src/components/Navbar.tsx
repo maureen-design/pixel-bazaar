@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles, X, ChevronDown, Package, LayoutDashboard, Search, Loader2 } from 'lucide-react';
+import { ShoppingCart, User, UserCircle, LogOut, Settings, Heart, Shield, Sun, Moon, Sparkles, X, ChevronDown, Package, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { AISearchBar } from './AISearchBar';
 import { ShoppingAssistantModal } from './ai/ShoppingAssistantModal';
 import { Button } from './ui/button';
-import { toast } from 'sonner';
 import { Monogram } from './Monogram';
 import {
   DropdownMenu,
@@ -28,7 +27,6 @@ import { Separator } from './ui/separator';
 import { useSettings } from '../hooks/useSettings';
 import { useCategories } from '../hooks/useCategories';
 import { formatPrice } from '../config/pricing';
-import { supabase } from '../lib/supabaseClient';
 
 const HEADER_CATEGORY_LIMIT = 6;
 
@@ -37,10 +35,6 @@ export function Navbar() {
   const [isDark, setIsDark] = useState(true);
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [desktopQuery, setDesktopQuery] = useState('');
-  const [desktopAiMode, setDesktopAiMode] = useState(false);
-  const [desktopLoading, setDesktopLoading] = useState(false);
-  const desktopInputRef = useRef<HTMLInputElement>(null);
   const { user, signOut, isVendor, isAdmin } = useAuth();
   const { cartItems, cartCount, cartTotal, removeFromCart } = useCart();
   const { wishlistCount } = useWishlist();
@@ -82,43 +76,6 @@ export function Navbar() {
     navigate('/login');
   };
 
-  const handleDesktopSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = desktopQuery.trim();
-    if (!trimmed) return;
-
-    if (desktopAiMode) {
-      setDesktopLoading(true);
-      try {
-        const { data, error } = await supabase.functions.invoke('ai-assistant', {
-          body: { action: 'parse_search', data: { query: trimmed } },
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'AI search failed');
-
-        const filters = data.data;
-        const params = new URLSearchParams();
-        if (filters.keywords) params.set('q', filters.keywords);
-        if (filters.category) params.set('category', filters.category);
-        if (filters.productType) params.set('type', filters.productType);
-        if (filters.brand) params.set('brand', filters.brand);
-        if (filters.color) params.set('color', filters.color);
-        if (filters.minPrice) params.set('minPrice', String(filters.minPrice));
-        if (filters.maxPrice) params.set('maxPrice', String(filters.maxPrice));
-        if (filters.sortBy) params.set('sort', filters.sortBy);
-
-        navigate(params.size > 0 ? `/search?${params.toString()}` : `/search?q=${encodeURIComponent(trimmed)}`);
-      } catch {
-        toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
-        navigate(`/search?q=${encodeURIComponent(trimmed)}`);
-      } finally {
-        setDesktopLoading(false);
-      }
-    } else {
-      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
-    }
-  };
-
   const headerCategories = categories.slice(0, HEADER_CATEGORY_LIMIT);
   const moreCategories = categories.slice(HEADER_CATEGORY_LIMIT);
 
@@ -136,44 +93,9 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Search Bar */}
-          <form onSubmit={handleDesktopSearch} className="hidden md:flex items-center flex-1 max-w-md mx-6">
-            <div className="relative w-full">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {desktopLoading ? (
-                  <Loader2 aria-hidden="true" className="w-4 h-4 text-muted-foreground animate-spin" />
-                ) : (
-                  <Search aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
-                )}
-              </div>
-              <input
-                ref={desktopInputRef}
-                type="text"
-                aria-label={desktopAiMode ? 'Ask AI to search products' : 'Search products'}
-                placeholder={desktopAiMode ? 'Ask AI to find what you need...' : 'Search products...'}
-                value={desktopQuery}
-                onChange={(e) => setDesktopQuery(e.target.value)}
-                className={`w-full pl-9 pr-16 py-2 bg-muted border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all ${
-                  desktopAiMode ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border'
-                }`}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                <button
-                  type="button"
-                  onClick={() => { setDesktopAiMode(!desktopAiMode); setDesktopQuery(''); desktopInputRef.current?.focus(); }}
-                  aria-pressed={desktopAiMode}
-                  aria-label={desktopAiMode ? 'Switch to regular search' : 'Switch to AI search'}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
-                    desktopAiMode
-                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
-                      : 'bg-muted-foreground/20 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  AI
-                </button>
-              </div>
-            </div>
-          </form>
+          <div className="hidden md:flex items-center flex-1 max-w-md mx-6">
+            <AISearchBar />
+          </div>
 
           {/* Right Actions */}
           <div className="flex items-center gap-1">
@@ -493,7 +415,7 @@ export function Navbar() {
         </div>
       )}
 
-      {/* Search Bar Section */}
+      {/* Search Bar Section - Mobile */}
       <div className="border-t border-border/50 md:hidden">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <AISearchBar />

@@ -223,18 +223,18 @@ export function useSearch(searchTerm: string, filters: SearchFilters = {}) {
         `,
           { count: 'exact' }
         )
-        .eq('status', 'active')
-        .eq('vendor.is_verified', true);
+        .eq('status', 'active');
 
       if (hasSearchTerm) {
         // Each token is expanded (stemmed + synonyms) and searched across all columns.
         // Expanded terms within a token are ORed; tokens are ANDed.
         const tokenFilters = tokens.map(buildTokenFilter);
-        const textFilter = tokenFilters.join(').and(');
+        const textFilter = tokenFilters.join(','); // OR all token filters (already include column ORs within)
 
         if (categoryMatchIds && categoryMatchIds.length > 0) {
           // Text matches OR belonging to a matched category
-          query = query.or(`(${textFilter}),(category_id.in.(${categoryMatchIds.join(',')}))`);
+          // Simplified: use separate queries or in-list for categories
+          query = query.or(`${textFilter},category_id.in.(${categoryMatchIds.join(',')})`);
         } else {
           query = query.or(textFilter);
         }

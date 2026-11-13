@@ -18,6 +18,7 @@ export function AISearchBar() {
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speechRecognitionRef = useRef<any>(null);
+  const autoSubmitRef = useRef<string | null>(null);
 
   // Feature detection for SpeechRecognition (client-side only)
   useEffect(() => {
@@ -70,6 +71,10 @@ export function AISearchBar() {
           .map((result: any) => result[0].transcript)
           .join('');
         setQuery(transcript);
+        // Store final transcript for auto-submit
+        if (event.results[event.results.length - 1].isFinal) {
+          autoSubmitRef.current = transcript;
+        }
       };
 
       recognitionRef.current.onerror = (event: any) => {
@@ -89,6 +94,17 @@ export function AISearchBar() {
         if (silenceTimerRef.current) {
           clearTimeout(silenceTimerRef.current);
         }
+        // Auto-submit if we have a non-empty final transcript
+        const finalTranscript = autoSubmitRef.current;
+        if (finalTranscript && finalTranscript.trim()) {
+          // Small delay to allow UI to update, then submit
+          setTimeout(() => {
+            if (!loading) {
+              handleSubmit(new Event('submit') as any);
+            }
+          }, 300);
+        }
+        autoSubmitRef.current = null;
       };
     }
 
@@ -321,7 +337,7 @@ export function AISearchBar() {
           </div>
         </div>
       </form>
-      <div className="flex flex-wrap gap-1.5 mt-2">
+      <div className="flex flex-wrap gap-1.5 mt-2 md:hidden">
         {examples.map((example) => (
           <button
             key={example}
