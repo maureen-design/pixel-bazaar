@@ -28,7 +28,7 @@ import { Separator } from './ui/separator';
 import { useSettings } from '../hooks/useSettings';
 import { useCategories } from '../hooks/useCategories';
 import { formatPrice } from '../config/pricing';
-import { supabase } from '../lib/supabaseClient';
+import { invokeAIAssistant, isGuestAILimitError } from '../lib/aiAssistantClient';
 
 const HEADER_CATEGORY_LIMIT = 6;
 
@@ -90,9 +90,7 @@ export function Navbar() {
     if (desktopAiMode) {
       setDesktopLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke('ai-assistant', {
-          body: { action: 'parse_search', data: { query: trimmed } },
-        });
+        const { data, error } = await invokeAIAssistant('parse_search', { query: trimmed });
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || 'AI search failed');
 
@@ -108,7 +106,8 @@ export function Navbar() {
         if (filters.sortBy) params.set('sort', filters.sortBy);
 
         navigate(params.size > 0 ? `/search?${params.toString()}` : `/search?q=${encodeURIComponent(trimmed)}`);
-      } catch {
+      } catch (err) {
+        if (isGuestAILimitError(err)) return;
         toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
         navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       } finally {
