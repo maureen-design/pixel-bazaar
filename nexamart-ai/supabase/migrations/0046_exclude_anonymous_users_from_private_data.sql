@@ -38,6 +38,7 @@ declare
 begin
   foreach t in array private_tables loop
     if to_regclass('public.' || t) is not null then
+      execute format('alter table public.%I enable row level security', t);
       execute format('drop policy if exists nexa_non_anonymous_access on public.%I', t);
       execute format(
         'create policy nexa_non_anonymous_access on public.%I as restrictive for all to authenticated using (%s) with check (%s)',
@@ -50,6 +51,7 @@ begin
   -- mutations by anonymous Auth identities, leaving catalogue browsing intact.
   foreach t in array public_write_tables loop
     if to_regclass('public.' || t) is not null then
+      execute format('alter table public.%I enable row level security', t);
       execute format('drop policy if exists nexa_non_anonymous_insert on public.%I', t);
       execute format('drop policy if exists nexa_non_anonymous_update on public.%I', t);
       execute format('drop policy if exists nexa_non_anonymous_delete on public.%I', t);
@@ -87,7 +89,7 @@ end;
 $$;
 
 revoke all on function public.block_anonymous_order_insert() from public;
-grant execute on function public.block_anonymous_order_insert() to authenticated;
+grant execute on function public.block_anonymous_order_insert() to authenticated, service_role;
 
 drop trigger if exists trg_block_anonymous_order_insert on public.orders;
 create trigger trg_block_anonymous_order_insert
