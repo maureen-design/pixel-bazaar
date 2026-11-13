@@ -126,6 +126,7 @@ serve(async (req) => {
     return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
+  let guestLimitReached = false;
   try {
     const authUser = await verifyAuth(req.headers.get('Authorization'));
     if (!authUser) {
@@ -203,7 +204,7 @@ serve(async (req) => {
       }), { status: isGuestLimit ? 200 : 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const guestMaxTokens = 400;
-    const guestLimitReached = authUser.isAnonymous && reservation.guestRemaining === 0;
+    guestLimitReached = authUser.isAnonymous && reservation.guestRemaining === 0;
 
     if (action === 'parse_search') {
       const categories: any[] = await querySupabase('categories?select=slug&order=name.asc');
@@ -525,7 +526,7 @@ Only use product_id values from the list above.`;
     );
   } catch (error: any) {
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: error.message, guest_limit_reached: guestLimitReached }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
