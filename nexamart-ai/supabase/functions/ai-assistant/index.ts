@@ -136,11 +136,54 @@ serve(async (req) => {
     const action = body?.action;
     const data = body?.data && typeof body.data === 'object' ? body.data : {};
     const guestAllowedActions = new Set(['parse_search', 'shopping_assistant', 'explain_product', 'compare', 'compare_products']);
+
     const customerAllowedActions = new Set([...guestAllowedActions, 'generate_description']);
+    const isUuid = (value: unknown): value is string =>
+      typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    const validOptionalText = (value: unknown, max: number) =>
+      value == null || (typeof value === 'string' && value.length <= max);
+    if (JSON.stringify(data).length > 6000) {
+      return new Response(JSON.stringify({ success: false, error: 'Request is too large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (typeof action !== 'string' || !customerAllowedActions.has(action)) {
       return new Response(JSON.stringify({ success: false, error: 'Invalid action' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    if (action === 'parse_search' &&
+      (typeof data.query !== 'string' || data.query.trim().length < 1 || data.query.length > 200)) {
+      return new Response(JSON.stringify({ success: false, error: 'Search query must be between 1 and 200 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'shopping_assistant' &&
+      ((data.category != null && !isUuid(data.category)) ||
+       (data.budgetMin != null && (!Number.isFinite(data.budgetMin) || data.budgetMin < 0 || data.budgetMin > 100000000)) ||
+       (data.budgetMax != null && (!Number.isFinite(data.budgetMax) || data.budgetMax < 0 || data.budgetMax > 100000000)) ||
+       !validOptionalText(data.useCase, 120) || !validOptionalText(data.priorities, 200) ||
+       !validOptionalText(data.experienceLevel, 80))) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid shopping preferences' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'explain_product' && !isUuid(data.productId)) {
+      return new Response(JSON.stringify({ success: false, error: 'A valid productId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if ((action === 'compare' || action === 'compare_products') &&
+      (!Array.isArray(data.productIds) || data.productIds.length < 2 || data.productIds.length > 3 ||
+       !data.productIds.every(isUuid) || new Set(data.productIds).size !== data.productIds.length)) {
+      return new Response(JSON.stringify({ success: false, error: 'Provide 2 or 3 distinct valid productIds' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (action === 'generate_description' &&
+      (typeof data.productName !== 'string' || data.productName.trim().length < 1 || data.productName.length > 120 ||
+       !validOptionalText(data.category, 80) || !validOptionalText(data.features, 1200) ||
+       !validOptionalText(data.audience, 120))) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid product description details' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (authUser.isAnonymous && !guestAllowedActions.has(action)) {
       return new Response(JSON.stringify({ success: false, error: 'This AI feature requires a vendor account' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -223,8 +266,8 @@ Query: "${data.query}"
         minPrice: null, maxPrice: null, sortBy: null, keywords: data.query,
       });
 
-      if (parsed.category && typeof parsed.category === 'string' && parsed.category.length < 36) {
-        const catResult: any[] = await querySupabase(`categories?select=id&slug=eq.${parsed.category}`);
+      if (parsed.category && typeof parsed.category === 'string' && parsed.category.length < 36 && /^[a-z0-9-]+$/i.test(parsed.category)) {
+        const catResult: any[] = await querySupabase(`categories?select=id&slug=eq.${encodeURIComponent(parsed.category)}`);
         if (catResult.length > 0) {
           parsed.category = catResult[0].id;
         } else {
@@ -274,7 +317,7 @@ Return only the description text, no additional commentary.
       let products: any[] = [];
       try {
         let path = 'products?select=id,name,slug,description,price,compare_price,rating,brand,product_type,stock_quantity,variants,category_id,vendor_id,categories!inner(name),vendors!inner(store_name)&status=eq.active&order=rating.desc&limit=20';
-        if (category && typeof category === 'string' && category.length < 36) {
+        if (category && typeof category === 'string' && /^[0-9a-f-]{36}$/i.test(category)) {
           path += `&category_id=eq.${category}`;
         }
         if (budgetMin) path += `&price=gte.${budgetMin}`;
