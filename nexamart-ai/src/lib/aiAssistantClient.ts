@@ -76,5 +76,8 @@ export async function invokeAIAssistant<T = any>(
     throw new GuestAILimitError();
   }
   if (error) throw error;
+  if (result?.guest_limit_reached === true) {
+    window.dispatchEvent(new CustomEvent('nexamart:guest-ai-limit'));
+  }
   return result as AIAssistantResponse<T>;
 }
