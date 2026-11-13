@@ -176,7 +176,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <p className="text-sm font-medium text-warning mb-3">Only {totalStock} left</p>
           ) : null}
 
-          <div className="relative z-10 pointer-events-auto transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100">
+          <div className="relative z-10 pointer-events-auto">
             {hasVariants ? (
               <Button
                 variant="default"
