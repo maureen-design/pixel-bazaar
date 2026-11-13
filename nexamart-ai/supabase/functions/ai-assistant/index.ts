@@ -111,7 +111,7 @@ async function reserveAIRequest(userId: string, action: string, isGuest: boolean
     if (result?.reason === 'global_limit') return { allowed: false, code: 'AI_TEMPORARILY_UNAVAILABLE' };
     throw new Error('AI usage reservation was rejected');
   }
-  return { allowed: true };
+  return { allowed: true, guestRemaining: result.guest_remaining ?? null };
 }
 
 async function isVerifiedVendor(userId: string): Promise<boolean> {
@@ -157,9 +157,10 @@ serve(async (req) => {
         error: isGuestLimit ? 'Create a free account to experience more of NexaMart AI assistance.' :
           reservation.code === 'RATE_LIMITED' ? 'Please wait a moment before trying AI again.' :
           'AI assistance is temporarily unavailable. Please try again later.'
-      }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { status: isGuestLimit ? 200 : 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const guestMaxTokens = 400;
+    const guestLimitReached = authUser.isAnonymous && reservation.guestRemaining === 0;
 
     if (action === 'parse_search') {
       const categories: any[] = await querySupabase('categories?select=slug&order=name.asc');
@@ -232,7 +233,7 @@ Query: "${data.query}"
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: parsed }),
+        JSON.stringify({ success: true, data: parsed, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -262,7 +263,7 @@ Return only the description text, no additional commentary.
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: { description } }),
+        JSON.stringify({ success: true, data: { description }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -285,7 +286,7 @@ Return only the description text, no additional commentary.
 
       if (products.length === 0) {
         return new Response(
-          JSON.stringify({ success: true, data: { recommendations: [], summary: 'No products matched your criteria. Try adjusting your budget or category.' } }),
+          JSON.stringify({ success: true, data: { recommendations: [], summary: 'No products matched your criteria. Try adjusting your budget or category.' }, guest_limit_reached: guestLimitReached }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -342,7 +343,7 @@ Only use product_id values that appear in the list above.`;
         .map((r: any) => ({ ...r, product: productMap[r.product_id] }));
 
       return new Response(
-        JSON.stringify({ success: true, data: { recommendations, summary: parsed.summary } }),
+        JSON.stringify({ success: true, data: { recommendations, summary: parsed.summary }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -403,7 +404,7 @@ Return only the plain text explanation. No extra formatting.`;
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: { explanation } }),
+        JSON.stringify({ success: true, data: { explanation }, guest_limit_reached: guestLimitReached }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
