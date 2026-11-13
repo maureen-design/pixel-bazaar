@@ -35,6 +35,12 @@ export function GuestAIRegistrationPrompt() {
           >
             Create a free account
           </Link>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Already have an account?{' '}
+            <Link to={`/login?next=${encodeURIComponent(nextPath)}`} className="font-medium text-primary underline-offset-4 hover:underline">
+              Sign in
+            </Link>
+          </p>
         </div>
         <button
           type="button"
