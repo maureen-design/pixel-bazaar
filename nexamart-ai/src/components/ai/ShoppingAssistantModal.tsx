@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Loader2, Sparkles, RotateCcw, Check } from 'lucide-react';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { invokeAIAssistant } from '../../lib/aiAssistantClient';
+import { invokeAIAssistant, isGuestAILimitError } from '../../lib/aiAssistantClient';
 import { useCategories } from '../../hooks/useCategories';
 import { CategoryIcon } from '../../utils/categoryIcons';
 import { ProductRecommendationCard, type Recommendation } from './ProductRecommendationCard';
@@ -173,7 +173,7 @@ export function ShoppingAssistantModal({ open, onOpenChange, initialCategoryId }
       setSummary(data.data.summary || '');
       setStep('results');
     } catch (err: any) {
-      toast.error('Nexa is unavailable right now. Try again later.');
+      if (!isGuestAILimitError(err)) toast.error('Nexa is unavailable right now. Try again later.');
       setStep('question');
     }
   };
