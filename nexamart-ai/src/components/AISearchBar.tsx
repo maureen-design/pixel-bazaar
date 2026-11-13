@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { invokeAIAssistant, isGuestAILimitError } from '../lib/aiAssistantClient';
 import { toast } from 'sonner';
 
 const REGULAR_EXAMPLES = ['Black shoes', 'Laptops', "Men's jackets"];
@@ -129,9 +129,7 @@ export function AISearchBar() {
       // AI-parsed search
       setLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke('ai-assistant', {
-          body: { action: 'parse_search', data: { query: trimmed } },
-        });
+        const { data, error } = await invokeAIAssistant('parse_search', { query: trimmed });
 
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || 'AI search failed');
@@ -183,6 +181,7 @@ export function AISearchBar() {
 
         navigate(`/search?${params.toString()}`);
       } catch (err: any) {
+        if (isGuestAILimitError(err)) return;
         toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
         navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       } finally {
@@ -199,9 +198,7 @@ export function AISearchBar() {
     if (aiMode) {
       // Trigger AI search with the example
       setLoading(true);
-      supabase.functions.invoke('ai-assistant', {
-        body: { action: 'parse_search', data: { query: example } },
-      }).then(({ data, error }) => {
+      invokeAIAssistant('parse_search', { query: example }).then(({ data, error }) => {
         if (error || !data?.success) {
           toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
           navigate(`/search?q=${encodeURIComponent(example)}`);
@@ -244,7 +241,8 @@ export function AISearchBar() {
           return;
         }
         navigate(`/search?${params.toString()}`);
-      }).catch(() => {
+      }).catch((err) => {
+        if (isGuestAILimitError(err)) return;
         toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
         navigate(`/search?q=${encodeURIComponent(example)}`);
       }).finally(() => {
