@@ -54,7 +54,7 @@ declare
 begin
   if p_user_id is null
     or p_action is null
-    or p_action not in ('parse_search', 'shopping_assistant', 'explain_product', 'compare', 'compare_products')
+    or p_action not in ('parse_search', 'shopping_assistant', 'explain_product', 'compare', 'compare_products', 'generate_description')
     or p_guest_daily_limit < 1
     or p_minute_limit < 1
     or p_global_daily_limit < 1 then
