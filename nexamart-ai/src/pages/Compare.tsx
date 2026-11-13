@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
-import { invokeAIAssistant } from '../lib/aiAssistantClient';
+import { invokeAIAssistant, isGuestAILimitError } from '../lib/aiAssistantClient';
 import { useCompareProducts } from '../hooks/useProducts';
 import type { Product } from '../types';
 import { ProductSelector } from '../components/ai/ProductSelector';
@@ -86,8 +86,8 @@ export function Compare() {
       if (!data?.success) throw new Error(data?.error || 'Comparison failed');
 
       setResult(data.data);
-    } catch {
-      toast.error('AI comparison failed. Try again later.');
+    } catch (err) {
+      if (!isGuestAILimitError(err)) toast.error('AI comparison failed. Try again later.');
     } finally {
       setComparing(false);
     }
