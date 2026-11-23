@@ -127,8 +127,8 @@ export function ConversationalShoppingAssistant({
 
   const handleAskAboutProduct = (question: string) => {
     if (isLoading) return;
-    if (isListening) {
-      stopListening(false);
+    if (isVoiceSessionActive) {
+      stopListening(false, true);
     }
     // Stop any ongoing speech
     if (isSpeaking) {
@@ -139,8 +139,8 @@ export function ConversationalShoppingAssistant({
   };
 
   const handleReset = () => {
-    if (isListening) {
-      stopListening(false);
+    if (isVoiceSessionActive) {
+      stopListening(false, true);
     }
     // Stop any ongoing speech
     if (isSpeaking) {
