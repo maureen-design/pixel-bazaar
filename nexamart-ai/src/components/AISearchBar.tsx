@@ -7,125 +7,296 @@ import { toast } from 'sonner';
 const REGULAR_EXAMPLES = ['Black shoes', 'Laptops', "Men's jackets"];
 const AI_EXAMPLES = ['Black shoes under KES 5,000', 'Wireless headphones', "Men's jackets"];
 
+type VoiceStatus =
+  | 'idle'
+  | 'listening'
+  | 'submitting'
+  | 'submitted'
+  | 'no-speech'
+  | 'permission-denied'
+  | 'unsupported'
+  | 'interrupted'
+  | 'failed'
+  | 'stopped';
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultLike extends ArrayLike<SpeechRecognitionAlternativeLike> {
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionEventLike {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error: string;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
+// Deterministic price patterns for ordinary voice search
+const PRICE_PATTERNS = [
+  { regex: /\bbetween\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\s+and\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'range' as const },
+  { regex: /\bunder\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'max' as const },
+  { regex: /\bbelow\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'max' as const },
+  { regex: /\bless than\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'max' as const },
+  { regex: /\babove\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'min' as const },
+  { regex: /\bover\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'min' as const },
+  { regex: /\bmore than\s+([\d,]+(?:\.\d{1,2})?)\s+(?:Kenyan\s+)?shillings?\b/i, type: 'min' as const },
+  { regex: /\bbetween\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)\s+and\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'range' as const },
+  { regex: /\bunder\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'max' as const },
+  { regex: /\bbelow\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'max' as const },
+  { regex: /\bless than\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'max' as const },
+  { regex: /\babove\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'min' as const },
+  { regex: /\bover\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'min' as const },
+  { regex: /\bmore than\s+(?:KES|KSh)\s*([\d,]+(?:\.\d{1,2})?)/i, type: 'min' as const },
+];
+
+function parseVoiceQuery(query: string): { keywords: string; minPrice?: number; maxPrice?: number; fallbackQuery?: string; hasPriceConstraint: boolean } {
+  let minPrice: number | undefined;
+  let maxPrice: number | undefined;
+  let keywords = query;
+  let hasPriceConstraint = false;
+
+  for (const pattern of PRICE_PATTERNS) {
+    const match = pattern.regex.exec(query);
+    if (match) {
+      hasPriceConstraint = true;
+      if (pattern.type === 'max' && match[1]) {
+        maxPrice = Number(match[1].replace(/,/g, ''));
+        keywords = keywords.replace(match[0], ' ');
+      } else if (pattern.type === 'min' && match[1]) {
+        minPrice = Number(match[1].replace(/,/g, ''));
+        keywords = keywords.replace(match[0], ' ');
+      } else if (pattern.type === 'range' && match[1] && match[2]) {
+        const p1 = Number(match[1].replace(/,/g, ''));
+        const p2 = Number(match[2].replace(/,/g, ''));
+        minPrice = Math.min(p1, p2);
+        maxPrice = Math.max(p1, p2);
+        keywords = keywords.replace(match[0], ' ');
+      }
+      break;
+    }
+  }
+
+  keywords = keywords
+    .replace(/^\s*(?:(?:can you find(?: me)?|i am looking for|find me|show me|i need|i want|get me|search for|look for)\b[\s,:-]*)+/i, '')
+    .replace(/^\s*(?:a|an|the)\s+/i, '')
+    .replace(/\s+(?:products?|items?)[.,!?;:]*\s*$/i, '')
+    .replace(/(^|\s)[.,!?;:]+(?=\s|$)/g, '$1')
+    .replace(/^[.,!?;:]+|[.,!?;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Store fallback query without price constraints
+  const fallbackQuery = keywords;
+
+  return { keywords, minPrice, maxPrice, fallbackQuery, hasPriceConstraint };
+}
+
 export function AISearchBar() {
-  const [query, setQuery] = useState('');
+  const [speechRecognitionFactory] = useState<SpeechRecognitionConstructor | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const speechWindow = window as SpeechRecognitionWindow;
+    return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition || null;
+  });
+  const sttSupported = !!speechRecognitionFactory;
+  const [query, setQuery] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('voice_query') ?? '';
+  });
   const [aiMode, setAiMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [sttSupported, setSttSupported] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
+    if (typeof window === 'undefined') return 'idle';
+    if (!speechRecognitionFactory) return 'unsupported';
+    return new URLSearchParams(window.location.search).has('voice_query') ? 'submitted' : 'idle';
+  });
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const speechRecognitionRef = useRef<any>(null);
-  const autoSubmitRef = useRef<string | null>(null);
-
-  // Feature detection for SpeechRecognition (client-side only)
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const supported = !!SpeechRecognition;
-    speechRecognitionRef.current = SpeechRecognition;
-    setSttSupported(supported);
-    console.log('[Voice Search] STT supported:', supported);
-  }, []);
+  const voiceSessionIdRef = useRef(0);
+  const activeVoiceSessionRef = useRef<number | null>(null);
+  const finalTranscriptRef = useRef('');
+  const heardSpeechRef = useRef(false);
+  const submittedVoiceQueryRef = useRef<string | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
+      activeVoiceSessionRef.current = null;
+      recognitionRef.current?.abort();
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
     };
   }, []);
 
-  const resetSilenceTimer = () => {
+  const resetSilenceTimer = (sessionId: number) => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
     silenceTimerRef.current = setTimeout(() => {
-      if (isListening) {
-        stopListening();
+      if (activeVoiceSessionRef.current === sessionId) {
+        stopListening('interrupted');
         toast.info('Voice search stopped due to silence');
       }
     }, 8000); // 8 seconds of silence
   };
 
   const startListening = () => {
-    if (!sttSupported || !speechRecognitionRef.current) {
+    if (!sttSupported || !speechRecognitionFactory) {
+      setVoiceStatus('unsupported');
       toast.error('Voice search is not supported in this browser');
       return;
     }
 
-    if (!recognitionRef.current) {
-      recognitionRef.current = new speechRecognitionRef.current();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
+    if (activeVoiceSessionRef.current !== null || voiceStatus === 'submitting') return;
 
-      recognitionRef.current.onresult = (event: any) => {
-        resetSilenceTimer();
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join('');
-        setQuery(transcript);
-        // Store final transcript for auto-submit
-        if (event.results[event.results.length - 1].isFinal) {
-          autoSubmitRef.current = transcript;
-        }
-      };
+    if (aiMode) setAiMode(false);
 
-      recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        if (event.error === 'not-allowed') {
-          toast.error('Microphone access denied. Enable in browser settings to use voice search.');
-        } else if (event.error === 'no-speech') {
-          toast.info('No speech detected. Try again.');
-        } else {
-          toast.error('Voice search error. Please try again.');
-        }
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-        // Auto-submit if we have a non-empty final transcript
-        const finalTranscript = autoSubmitRef.current;
-        if (finalTranscript && finalTranscript.trim()) {
-          // Small delay to allow UI to update, then submit
-          setTimeout(() => {
-            if (!loading) {
-              handleSubmit(new Event('submit') as any);
-            }
-          }, 300);
-        }
-        autoSubmitRef.current = null;
-      };
+    const sessionId = ++voiceSessionIdRef.current;
+    try {
+      recognitionRef.current = new speechRecognitionFactory();
+    } catch (error) {
+      console.error('Failed to create speech recognition:', error);
+      setVoiceStatus('failed');
+      toast.error('Failed to start voice search. Please try again.');
+      return;
     }
 
+    const recognition = recognitionRef.current;
+    activeVoiceSessionRef.current = sessionId;
+    finalTranscriptRef.current = '';
+    heardSpeechRef.current = false;
+    submittedVoiceQueryRef.current = null;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: SpeechRecognitionEventLike) => {
+      if (activeVoiceSessionRef.current !== sessionId) return;
+      resetSilenceTimer(sessionId);
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript?.trim();
+        if (!transcript) continue;
+        if (result.isFinal) {
+          finalParts.push(transcript);
+        } else {
+          interimParts.push(transcript);
+        }
+      }
+
+      const finalTranscript = finalParts.join(' ').replace(/\s+/g, ' ').trim();
+      const interimTranscript = interimParts.join(' ').replace(/\s+/g, ' ').trim();
+      finalTranscriptRef.current = finalTranscript;
+      heardSpeechRef.current = heardSpeechRef.current || !!finalTranscript || !!interimTranscript;
+      const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ');
+      if (visibleTranscript) setQuery(visibleTranscript);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
+      if (activeVoiceSessionRef.current !== sessionId) return;
+      console.error('Speech recognition error:', event.error);
+      activeVoiceSessionRef.current = null;
+      finalTranscriptRef.current = '';
+      setIsListening(false);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setVoiceStatus('permission-denied');
+        toast.error('Microphone access denied. Enable it in browser settings or type your search.');
+      } else if (event.error === 'no-speech') {
+        setVoiceStatus('no-speech');
+        toast.info('No speech detected. Try again or type your search.');
+      } else if (event.error === 'aborted') {
+        setVoiceStatus('interrupted');
+      } else {
+        setVoiceStatus('failed');
+        toast.error('Voice search failed. Try again or type your search.');
+      }
+    };
+
+    recognition.onend = () => {
+      if (activeVoiceSessionRef.current !== sessionId) return;
+      activeVoiceSessionRef.current = null;
+      setIsListening(false);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+      const transcript = finalTranscriptRef.current.trim();
+      if (!transcript) {
+        setVoiceStatus(heardSpeechRef.current ? 'interrupted' : 'no-speech');
+        if (!heardSpeechRef.current) toast.info('No speech detected. Try again or type your search.');
+        return;
+      }
+
+      if (submittedVoiceQueryRef.current === transcript) return;
+      submittedVoiceQueryRef.current = transcript;
+      setQuery(transcript);
+      setVoiceStatus('submitting');
+      void submitQuery(transcript, false, transcript)
+        .catch((error) => {
+          console.error('Failed to submit voice search:', error);
+          setVoiceStatus('failed');
+          toast.error('Could not search the catalogue. Please try again.');
+        })
+        .finally(() => {
+          setVoiceStatus((status) => status === 'submitting' ? 'submitted' : status);
+        });
+    };
+
     try {
-      recognitionRef.current.start();
+      recognition.start();
       setIsListening(true);
-      resetSilenceTimer();
+      setVoiceStatus('listening');
+      resetSilenceTimer(sessionId);
     } catch (error) {
+      activeVoiceSessionRef.current = null;
+      setIsListening(false);
       console.error('Failed to start speech recognition:', error);
-      toast.error('Failed to start voice search. Please try again.');
+      const denied = error instanceof DOMException && error.name === 'NotAllowedError';
+      setVoiceStatus(denied ? 'permission-denied' : 'failed');
+      toast.error(denied
+        ? 'Microphone access denied. Enable it in browser settings or type your search.'
+        : 'Failed to start voice search. Please try again.');
     }
   };
 
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
+  const stopListening = (status: VoiceStatus = 'stopped') => {
+    if (activeVoiceSessionRef.current === null) return;
+    activeVoiceSessionRef.current = null;
+    finalTranscriptRef.current = '';
+    heardSpeechRef.current = false;
     setIsListening(false);
+    setVoiceStatus(status);
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
+    recognitionRef.current?.abort();
+    inputRef.current?.focus();
   };
 
   const toggleListening = () => {
@@ -136,12 +307,11 @@ export function AISearchBar() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = query.trim();
+  const submitQuery = async (searchQuery: string, useAI: boolean, voiceTranscript?: string) => {
+    const trimmed = searchQuery.trim();
     if (!trimmed) return;
 
-    if (aiMode) {
+    if (useAI) {
       // AI-parsed search
       setLoading(true);
       try {
@@ -204,9 +374,27 @@ export function AISearchBar() {
         setLoading(false);
       }
     } else {
-      // Regular text search
-      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+      // Regular text or voice search with deterministic parsing
+      const parsed = parseVoiceQuery(trimmed);
+      const params = new URLSearchParams();
+
+      if (parsed.keywords) params.set('q', parsed.keywords);
+      if (parsed.minPrice !== undefined) params.set('minPrice', String(parsed.minPrice));
+      if (parsed.maxPrice !== undefined) params.set('maxPrice', String(parsed.maxPrice));
+      if (parsed.hasPriceConstraint) params.set('voice_price_constraint', 'true');
+      if (voiceTranscript) params.set('voice_query', voiceTranscript);
+
+      navigate(`/search?${params.toString()}`);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeVoiceSessionRef.current !== null) return;
+
+    const trimmed = query.trim();
+    if (submittedVoiceQueryRef.current === trimmed) return;
+    void submitQuery(trimmed, aiMode);
   };
 
   const handleExampleClick = (example: string) => {
@@ -270,10 +458,22 @@ export function AISearchBar() {
   };
 
   const examples = aiMode ? AI_EXAMPLES : REGULAR_EXAMPLES;
+  const voiceStatusMessages: Record<VoiceStatus, string> = {
+    idle: 'Microphone idle. Type a search or select the microphone.',
+    listening: 'Listening. Speak a product request or select the microphone to stop.',
+    submitting: 'Speech recognised. Searching the product catalogue.',
+    submitted: 'Speech recognised. Your catalogue search has been submitted.',
+    'no-speech': 'No speech detected. Try again or type your search.',
+    'permission-denied': 'Microphone permission denied. You can still type your search.',
+    unsupported: 'Voice search is unavailable in this browser. You can type your search.',
+    interrupted: 'Voice search was interrupted. Try again or edit the transcript.',
+    failed: 'Voice search failed. Try again or type your search.',
+    stopped: 'Listening stopped. You can continue typing.',
+  };
 
   return (
     <div className="w-full">
-      <form onSubmit={handleSubmit} aria-busy={loading}>
+      <form onSubmit={handleSubmit} aria-busy={loading || isListening || voiceStatus === 'submitting'}>
         <div className="relative flex items-center">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {loading ? (
@@ -289,37 +489,47 @@ export function AISearchBar() {
             ref={inputRef}
             type="text"
             aria-label={aiMode ? 'Ask AI to search products' : 'Search products'}
+            aria-describedby="voice-search-status"
             placeholder={aiMode ? 'Ask AI to find what you need…' : 'Search products by name or type…'}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              submittedVoiceQueryRef.current = null;
+              setVoiceStatus('idle');
+              setQuery(e.target.value);
+            }}
             className={`w-full pl-10 pr-20 py-2 bg-muted border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all ${
               aiMode ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border'
             }`}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {aiMode && sttSupported && (
-              <button
-                type="button"
-                onClick={toggleListening}
-                aria-label={isListening ? 'Stop voice search' : 'Start voice search'}
-                aria-pressed={isListening}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
-                  isListening
-                    ? 'bg-destructive text-destructive-foreground animate-pulse'
-                    : 'bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-                title={isListening ? 'Stop listening' : 'Voice search'}
-              >
-                {isListening ? (
-                  <MicOff className="w-3 h-3" />
-                ) : (
-                  <Mic className="w-3 h-3" />
-                )}
-              </button>
-            )}
             <button
               type="button"
-              onClick={() => { setAiMode(!aiMode); setQuery(''); stopListening(); inputRef.current?.focus(); }}
+              onClick={toggleListening}
+              aria-label={isListening ? 'Stop voice search' : sttSupported ? 'Start voice search' : 'Voice search unavailable'}
+              aria-pressed={isListening}
+              disabled={!sttSupported || voiceStatus === 'submitting'}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
+                isListening
+                  ? 'bg-destructive text-destructive-foreground animate-pulse'
+                  : 'bg-muted text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50'
+              }`}
+              title={isListening ? 'Stop listening' : sttSupported ? 'Voice search' : 'Voice search unavailable'}
+            >
+              {isListening ? (
+                <MicOff aria-hidden="true" className="w-3 h-3" />
+              ) : (
+                <Mic aria-hidden="true" className="w-3 h-3" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = !aiMode;
+                setAiMode(nextMode);
+                setQuery('');
+                stopListening();
+                inputRef.current?.focus();
+              }}
               aria-pressed={aiMode}
               aria-label={aiMode ? 'Switch to regular search' : 'Switch to AI search'}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
@@ -335,6 +545,15 @@ export function AISearchBar() {
           </div>
         </div>
       </form>
+      <p
+        id="voice-search-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={voiceStatus === 'idle' ? 'sr-only' : 'mt-1 text-xs text-muted-foreground'}
+      >
+        {voiceStatusMessages[voiceStatus]}
+      </p>
       <div className="flex flex-wrap gap-1.5 mt-2 md:hidden">
         {examples.map((example) => (
           <button

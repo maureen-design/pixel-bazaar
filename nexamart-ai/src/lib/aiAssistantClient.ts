@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
+import type { ProductVariants } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -20,6 +21,55 @@ export interface AIAssistantResponse<T = any> {
   data?: T;
   error?: string;
   code?: string;
+  guest_limit_reached?: boolean;
+}
+
+export interface ShoppingConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ShoppingConversationProduct {
+  id: string;
+  name: string;
+  price: number;
+  images: string[];
+  rating: number;
+  stock_quantity: number;
+  status: string;
+  variants?: ProductVariants;
+}
+
+export interface ShoppingConversationResponseData {
+  reply: string;
+  recommendations: ShoppingConversationProduct[];
+}
+
+export function generateRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export async function sendShoppingConversationMessage(
+  message: string,
+  history: ShoppingConversationTurn[],
+  requestId: string
+): Promise<AIAssistantResponse<ShoppingConversationResponseData>> {
+  return invokeAIAssistant<ShoppingConversationResponseData>('shopping_assistant', {
+    mode: 'conversation',
+    message: message.trim(),
+    history: history.slice(-8).map((turn) => ({
+      role: turn.role,
+      content: turn.content.slice(0, 500),
+    })),
+    requestId,
+  });
 }
 
 export class GuestAILimitError extends Error {
