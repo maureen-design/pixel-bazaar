@@ -137,9 +137,7 @@ export function AISearchBar() {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceSessionIdRef = useRef(0);
   const activeVoiceSessionRef = useRef<number | null>(null);
-  const finalTranscriptRef = useRef('');
   const recognizedTranscriptRef = useRef('');
-  const heardSpeechRef = useRef(false);
   const submittedVoiceQueryRef = useRef<string | null>(null);
 
   // Cleanup on unmount
@@ -167,9 +165,7 @@ export function AISearchBar() {
     const transcript = recognizedTranscriptRef.current.trim();
     if (action === 'cancel') {
       try { recognitionRef.current?.abort(); } catch { /* Already stopped. */ }
-      finalTranscriptRef.current = '';
       recognizedTranscriptRef.current = '';
-      heardSpeechRef.current = false;
       setQuery('');
       setVoiceStatus('stopped');
       inputRef.current?.focus();
@@ -241,9 +237,7 @@ export function AISearchBar() {
 
     const recognition = recognitionRef.current;
     activeVoiceSessionRef.current = sessionId;
-    finalTranscriptRef.current = '';
     recognizedTranscriptRef.current = '';
-    heardSpeechRef.current = false;
     submittedVoiceQueryRef.current = null;
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -267,8 +261,6 @@ export function AISearchBar() {
 
       const finalTranscript = finalParts.join(' ').replace(/\s+/g, ' ').trim();
       const interimTranscript = interimParts.join(' ').replace(/\s+/g, ' ').trim();
-      finalTranscriptRef.current = finalTranscript;
-      heardSpeechRef.current = heardSpeechRef.current || !!finalTranscript || !!interimTranscript;
       const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
       recognizedTranscriptRef.current = visibleTranscript;
       if (visibleTranscript) setQuery(visibleTranscript);
