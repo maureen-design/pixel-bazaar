@@ -46,6 +46,7 @@ export function ConversationalShoppingAssistant({
   const {
     isSupported: isVoiceSupported,
     isListening,
+    isSessionActive: isVoiceSessionActive,
     status: voiceStatus,
     announcement: voiceAnnouncement,
     startListening,
@@ -107,17 +108,9 @@ export function ConversationalShoppingAssistant({
       stopListening(false);
       inputRef.current?.focus();
     } else {
-      // Stop any ongoing speech before starting microphone listening
-      if (isSpeaking) {
-        stopSpeaking();
-        // Give speech synthesis a moment to fully stop before starting recognition
-        // This prevents potential race conditions
-        setTimeout(() => {
-          startListening();
-        }, 50);
-      } else {
-        startListening();
-      }
+      // Request speech cancellation before opening the microphone.
+      if (isSpeaking) stopSpeaking();
+      startListening();
     }
   };
 
@@ -258,7 +251,7 @@ export function ConversationalShoppingAssistant({
       </header>
 
       {/* Voice Status Alert Banner (Accessible visual & screen status) */}
-      {isListening && (
+      {isVoiceSessionActive && (
         <div
           role="status"
           aria-live="polite"
@@ -267,17 +260,45 @@ export function ConversationalShoppingAssistant({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
             <span className="font-medium">
-              Listening... Speak your shopping request, or click Stop to edit.
+              {isListening ? 'Listening... Speak your shopping request.' : 'Speech capture paused. Confirm, edit, or cancel your transcript.'}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => stopListening(false)}
-            aria-label="Stop listening and keep current transcript in the input box"
-            className="text-xs underline font-semibold hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
-          >
-            Stop &amp; Edit
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                stopListening(true);
+              }}
+              aria-label="Done. Submit the recognized voice message"
+              disabled={!input.trim()}
+              className="text-xs font-semibold underline disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                stopListening(false);
+                inputRef.current?.focus();
+              }}
+              aria-label="Stop listening and keep the transcript for editing"
+              className="text-xs underline font-semibold hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
+            >
+              Stop &amp; Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                stopListening(false, true);
+                setInput('');
+                inputRef.current?.focus();
+              }}
+              aria-label="Cancel voice recording and discard transcript"
+              className="text-xs underline font-semibold hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
