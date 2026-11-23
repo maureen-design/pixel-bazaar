@@ -138,6 +138,7 @@ export function AISearchBar() {
   const voiceSessionIdRef = useRef(0);
   const activeVoiceSessionRef = useRef<number | null>(null);
   const finalTranscriptRef = useRef('');
+  const recognizedTranscriptRef = useRef('');
   const heardSpeechRef = useRef(false);
   const submittedVoiceQueryRef = useRef<string | null>(null);
 
@@ -152,16 +153,69 @@ export function AISearchBar() {
     };
   }, []);
 
-  const resetSilenceTimer = (sessionId: number) => {
+  const finishListening = (action: 'submit' | 'edit' | 'cancel') => {
+    const sessionId = activeVoiceSessionRef.current;
+    if (sessionId === null) return;
+
+    activeVoiceSessionRef.current = null;
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
+    setIsListening(false);
+
+    const transcript = recognizedTranscriptRef.current.trim();
+    if (action === 'cancel') {
+      try { recognitionRef.current?.abort(); } catch { /* Already stopped. */ }
+      finalTranscriptRef.current = '';
+      recognizedTranscriptRef.current = '';
+      heardSpeechRef.current = false;
+      setQuery('');
+      setVoiceStatus('stopped');
+      inputRef.current?.focus();
+      return;
+    }
+
+    try { recognitionRef.current?.stop(); } catch { /* Recognition may already have ended. */ }
+
+    if (action === 'edit') {
+      setQuery(transcript);
+      setVoiceStatus('stopped');
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (!transcript || submittedVoiceQueryRef.current === transcript) {
+      setVoiceStatus('no-speech');
+      toast.info('No speech detected. Try again or type your search.');
+      return;
+    }
+
+    submittedVoiceQueryRef.current = transcript;
+    setQuery(transcript);
+    setVoiceStatus('submitting');
+    void submitQuery(transcript, false, transcript)
+      .catch((error) => {
+        console.error('Failed to submit voice search:', error);
+        setVoiceStatus('failed');
+        toast.error('Could not search the catalogue. Please try again.');
+      })
+      .finally(() => {
+        setVoiceStatus((status) => status === 'submitting' ? 'submitted' : status);
+      });
+  };
+
+  const resetSilenceTimer = (sessionId: number) => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = setTimeout(() => {
-      if (activeVoiceSessionRef.current === sessionId) {
-        stopListening('interrupted');
-        toast.info('Voice search stopped due to silence');
+      if (activeVoiceSessionRef.current !== sessionId) return;
+      if (recognizedTranscriptRef.current.trim()) {
+        finishListening('submit');
+      } else {
+        finishListening('edit');
+        setVoiceStatus('no-speech');
       }
-    }, 8000); // 8 seconds of silence
+    }, 5000);
   };
 
   const startListening = () => {
@@ -188,6 +242,7 @@ export function AISearchBar() {
     const recognition = recognitionRef.current;
     activeVoiceSessionRef.current = sessionId;
     finalTranscriptRef.current = '';
+    recognizedTranscriptRef.current = '';
     heardSpeechRef.current = false;
     submittedVoiceQueryRef.current = null;
     recognition.continuous = false;
@@ -214,58 +269,44 @@ export function AISearchBar() {
       const interimTranscript = interimParts.join(' ').replace(/\s+/g, ' ').trim();
       finalTranscriptRef.current = finalTranscript;
       heardSpeechRef.current = heardSpeechRef.current || !!finalTranscript || !!interimTranscript;
-      const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ');
+      const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
+      recognizedTranscriptRef.current = visibleTranscript;
       if (visibleTranscript) setQuery(visibleTranscript);
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
       if (activeVoiceSessionRef.current !== sessionId) return;
       console.error('Speech recognition error:', event.error);
-      activeVoiceSessionRef.current = null;
-      finalTranscriptRef.current = '';
       setIsListening(false);
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        activeVoiceSessionRef.current = null;
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         setVoiceStatus('permission-denied');
         toast.error('Microphone access denied. Enable it in browser settings or type your search.');
-      } else if (event.error === 'no-speech') {
+      } else if (event.error === 'no-speech' && !recognizedTranscriptRef.current.trim()) {
+        activeVoiceSessionRef.current = null;
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         setVoiceStatus('no-speech');
         toast.info('No speech detected. Try again or type your search.');
-      } else if (event.error === 'aborted') {
-        setVoiceStatus('interrupted');
       } else {
-        setVoiceStatus('failed');
-        toast.error('Voice search failed. Try again or type your search.');
+        setVoiceStatus('interrupted');
+        if (!recognizedTranscriptRef.current.trim()) {
+          activeVoiceSessionRef.current = null;
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          toast.error('Voice search was interrupted. Please try again.');
+        }
       }
     };
 
     recognition.onend = () => {
       if (activeVoiceSessionRef.current !== sessionId) return;
-      activeVoiceSessionRef.current = null;
       setIsListening(false);
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-      const transcript = finalTranscriptRef.current.trim();
-      if (!transcript) {
-        setVoiceStatus(heardSpeechRef.current ? 'interrupted' : 'no-speech');
-        if (!heardSpeechRef.current) toast.info('No speech detected. Try again or type your search.');
-        return;
-      }
-
-      if (submittedVoiceQueryRef.current === transcript) return;
-      submittedVoiceQueryRef.current = transcript;
-      setQuery(transcript);
-      setVoiceStatus('submitting');
-      void submitQuery(transcript, false, transcript)
-        .catch((error) => {
-          console.error('Failed to submit voice search:', error);
-          setVoiceStatus('failed');
-          toast.error('Could not search the catalogue. Please try again.');
-        })
-        .finally(() => {
-          setVoiceStatus((status) => status === 'submitting' ? 'submitted' : status);
-        });
+      const transcript = recognizedTranscriptRef.current.trim();
+      setVoiceStatus(transcript ? 'interrupted' : 'no-speech');
+      // Do not submit on onend: browser implementations can end recognition
+      // before the user has finished their intended sentence. The silence timer
+      // or an explicit Done action is the only voice-submit trigger.
     };
 
     try {
@@ -285,23 +326,11 @@ export function AISearchBar() {
     }
   };
 
-  const stopListening = (status: VoiceStatus = 'stopped') => {
-    if (activeVoiceSessionRef.current === null) return;
-    activeVoiceSessionRef.current = null;
-    finalTranscriptRef.current = '';
-    heardSpeechRef.current = false;
-    setIsListening(false);
-    setVoiceStatus(status);
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    recognitionRef.current?.abort();
-    inputRef.current?.focus();
-  };
+  const stopListening = () => finishListening('cancel');
 
   const toggleListening = () => {
-    if (isListening) {
-      stopListening();
+    if (activeVoiceSessionRef.current !== null) {
+      finishListening('edit');
     } else {
       startListening();
     }
@@ -505,21 +534,17 @@ export function AISearchBar() {
             <button
               type="button"
               onClick={toggleListening}
-              aria-label={isListening ? 'Stop voice search' : sttSupported ? 'Start voice search' : 'Voice search unavailable'}
-              aria-pressed={isListening}
+              aria-label={activeVoiceSessionRef.current !== null ? 'Stop voice input and keep transcript for editing' : sttSupported ? 'Start voice search' : 'Voice search unavailable'}
+              aria-pressed={activeVoiceSessionRef.current !== null}
               disabled={!sttSupported || voiceStatus === 'submitting'}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
                 isListening
                   ? 'bg-destructive text-destructive-foreground animate-pulse'
                   : 'bg-muted text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50'
               }`}
-              title={isListening ? 'Stop listening' : sttSupported ? 'Voice search' : 'Voice search unavailable'}
+              title={isListening ? 'Stop and edit' : sttSupported ? 'Voice search' : 'Voice search unavailable'}
             >
-              {isListening ? (
-                <MicOff aria-hidden="true" className="w-3 h-3" />
-              ) : (
-                <Mic aria-hidden="true" className="w-3 h-3" />
-              )}
+              {isListening ? <MicOff aria-hidden="true" className="w-3 h-3" /> : <Mic aria-hidden="true" className="w-3 h-3" />}
             </button>
             <button
               type="button"
@@ -545,6 +570,14 @@ export function AISearchBar() {
           </div>
         </div>
       </form>
+      {activeVoiceSessionRef.current !== null && (
+        <div className="mt-2 flex items-center gap-3 text-xs" role="group" aria-label="Voice search controls">
+          <span className="text-muted-foreground">{isListening ? 'Listening. Five seconds of silence submits your search.' : 'Recognition paused. Review your transcript.'}</span>
+          <button type="button" onClick={() => finishListening('submit')} disabled={!recognizedTranscriptRef.current.trim()} className="font-semibold underline disabled:opacity-40">Done</button>
+          <button type="button" onClick={() => finishListening('edit')} className="font-semibold underline">Stop &amp; Edit</button>
+          <button type="button" onClick={() => finishListening('cancel')} className="font-semibold underline">Cancel</button>
+        </div>
+      )}
       <p
         id="voice-search-status"
         role="status"
