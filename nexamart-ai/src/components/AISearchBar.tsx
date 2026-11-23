@@ -239,7 +239,7 @@ export function AISearchBar() {
     activeVoiceSessionRef.current = sessionId;
     recognizedTranscriptRef.current = '';
     submittedVoiceQueryRef.current = null;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
