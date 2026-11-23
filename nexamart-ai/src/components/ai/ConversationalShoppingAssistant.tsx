@@ -87,14 +87,12 @@ export function ConversationalShoppingAssistant({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isListening) {
-      stopListening(false);
-    }
-    // Stop any ongoing speech
-    if (isSpeaking) {
-      stopSpeaking();
-    }
     const text = input.trim();
+    if (isVoiceSessionActive) {
+      // A manual send is one turn; discard the microphone session to prevent a later duplicate.
+      stopListening(false, true);
+    }
+    if (isSpeaking) stopSpeaking();
     if (!text || isLoading) return;
     sendMessage(text);
     setInput('');
@@ -103,8 +101,8 @@ export function ConversationalShoppingAssistant({
 
   const handleMicClick = () => {
     if (isLoading) return;
-    if (isListening) {
-      // Stopping listening deliberately keeps the transcript in the input so user can edit before sending
+    if (isVoiceSessionActive) {
+      // A manual mic toggle stops capture and keeps the transcript editable.
       stopListening(false);
       inputRef.current?.focus();
     } else {
@@ -116,8 +114,8 @@ export function ConversationalShoppingAssistant({
 
   const handleSuggestionClick = (suggestion: string) => {
     if (isLoading) return;
-    if (isListening) {
-      stopListening(false);
+    if (isVoiceSessionActive) {
+      stopListening(false, true);
     }
     // Stop any ongoing speech
     if (isSpeaking) {
