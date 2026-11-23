@@ -56,6 +56,7 @@ interface UseSpeechRecognitionOptions {
 export function useSpeechRecognition({
   onInterimTranscript,
   onFinalTranscript,
+  autoSubmitDelay = 5000,
 }: UseSpeechRecognitionOptions = {}) {
   const [speechRecognitionFactory] = useState<SpeechRecognitionConstructor | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -64,34 +65,44 @@ export function useSpeechRecognition({
   });
 
   const isSupported = Boolean(speechRecognitionFactory);
-
   const [isListening, setIsListening] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
   const [status, setStatus] = useState<VoiceRecognitionStatus>(() =>
     isSupported ? 'idle' : 'unsupported'
   );
-  const [announcement, setAnnouncement] = useState<string>('');
+  const [announcement, setAnnouncement] = useState('');
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceSessionIdRef = useRef(0);
   const activeSessionIdRef = useRef<number | null>(null);
   const finalTranscriptRef = useRef('');
   const interimTranscriptRef = useRef('');
-  const hasSpokenRef = useRef(false);
   const submittedForSessionRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearSilenceTimer = useCallback(() => {
-    if (silenceTimerRef.current) {
+    if (silenceTimerRef.current !== null) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
   }, []);
 
-  const stopListening = useCallback((submitFinal = false) => {
-    clearSilenceTimer();
-    const currentSessionId = activeSessionIdRef.current;
+  const getTranscript = useCallback(() => {
+    return [finalTranscriptRef.current, interimTranscriptRef.current]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const stopListening = useCallback((submitFinal = false, discard = false) => {
+    const sessionId = activeSessionIdRef.current;
+    if (sessionId === null) return;
+
     activeSessionIdRef.current = null;
+    clearSilenceTimer();
     setIsListening(false);
+    setIsSessionActive(false);
 
     try {
       recognitionRef.current?.stop();
@@ -99,40 +110,55 @@ export function useSpeechRecognition({
       try {
         recognitionRef.current?.abort();
       } catch {
-        // Safe ignore
+        // Browser recognition may already have stopped.
       }
     }
 
-    const transcript = finalTranscriptRef.current.trim() || interimTranscriptRef.current.trim();
+    const transcript = getTranscript();
 
-    if (submitFinal && transcript && currentSessionId && submittedForSessionRef.current !== currentSessionId) {
-      submittedForSessionRef.current = currentSessionId;
+    if (discard) {
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      submittedForSessionRef.current = sessionId;
+      onInterimTranscript?.('');
+      setStatus('stopped');
+      setAnnouncement('Voice recording canceled. The transcript was discarded.');
+      return;
+    }
+
+    if (submitFinal && transcript && submittedForSessionRef.current !== sessionId) {
+      submittedForSessionRef.current = sessionId;
       setStatus('success');
-      setAnnouncement(`Speech recognized: "${transcript}". Submitting your message to Nexa.`);
-      if (onFinalTranscript) {
-        onFinalTranscript(transcript);
-      }
-    } else if (transcript) {
-      setStatus('stopped');
-      setAnnouncement(`Microphone stopped. Transcript ready in the message box. You can edit before sending.`);
-    } else {
-      setStatus('stopped');
-      setAnnouncement('Microphone stopped.');
+      setAnnouncement('Voice message confirmed. Sending your message to Nexa.');
+      onFinalTranscript?.(transcript);
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      return;
     }
-  }, [clearSilenceTimer, onFinalTranscript]);
+
+    setStatus('stopped');
+    setAnnouncement(
+      transcript
+        ? 'Microphone stopped. Your transcript is ready to edit before sending.'
+        : 'Microphone stopped.'
+    );
+  }, [clearSilenceTimer, getTranscript, onFinalTranscript, onInterimTranscript]);
 
   const resetSilenceTimer = useCallback((sessionId: number) => {
     clearSilenceTimer();
     silenceTimerRef.current = setTimeout(() => {
-      if (activeSessionIdRef.current === sessionId) {
-        stopListening(false);
-        setStatus('interrupted');
-        setAnnouncement('Microphone stopped due to silence.');
-      }
-    }, 7000);
-  }, [clearSilenceTimer, stopListening]);
+      if (activeSessionIdRef.current !== sessionId) return;
 
-  // Cleanup on unmount
+      if (getTranscript()) {
+        stopListening(true);
+      } else {
+        stopListening(false);
+        setStatus('no-speech');
+        setAnnouncement('No speech was detected. Please try again or type your request.');
+      }
+    }, Math.max(1000, autoSubmitDelay));
+  }, [autoSubmitDelay, clearSilenceTimer, getTranscript, stopListening]);
+
   useEffect(() => {
     return () => {
       activeSessionIdRef.current = null;
@@ -140,7 +166,7 @@ export function useSpeechRecognition({
       try {
         recognitionRef.current?.abort();
       } catch {
-        // Safe ignore
+        // Safe ignore during unmount.
       }
     };
   }, [clearSilenceTimer]);
@@ -153,7 +179,6 @@ export function useSpeechRecognition({
     }
 
     if (activeSessionIdRef.current !== null) {
-      // Toggle off if currently active
       stopListening(false);
       return;
     }
@@ -162,130 +187,132 @@ export function useSpeechRecognition({
     activeSessionIdRef.current = sessionId;
     finalTranscriptRef.current = '';
     interimTranscriptRef.current = '';
-    hasSpokenRef.current = false;
+    submittedForSessionRef.current = null;
 
+    let recognition: SpeechRecognitionLike;
     try {
-      recognitionRef.current = new speechRecognitionFactory();
+      recognition = new speechRecognitionFactory();
+      recognitionRef.current = recognition;
     } catch {
       activeSessionIdRef.current = null;
+      setIsListening(false);
+      setIsSessionActive(false);
       setStatus('failed');
-      setAnnouncement('Unable to access microphone. Please try again or type your message.');
+      setAnnouncement('Unable to start microphone access. Please try again or type your request.');
       return;
     }
 
-    const recognition = recognitionRef.current;
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
       if (activeSessionIdRef.current !== sessionId) return;
-      resetSilenceTimer(sessionId);
 
       const finalParts: string[] = [];
       const interimParts: string[] = [];
 
-      for (let i = 0; i < event.results.length; i++) {
-        const item = event.results[i];
-        const text = item?.[0]?.transcript?.trim();
-        if (!text) continue;
-        if (item.isFinal) {
-          finalParts.push(text);
-        } else {
-          interimParts.push(text);
-        }
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript?.trim();
+        if (!transcript) continue;
+        if (result.isFinal) finalParts.push(transcript);
+        else interimParts.push(transcript);
       }
 
-      const finalJoined = finalParts.join(' ').replace(/\s+/g, ' ').trim();
-      const interimJoined = interimParts.join(' ').replace(/\s+/g, ' ').trim();
+      finalTranscriptRef.current = finalParts.join(' ').replace(/\\s+/g, ' ').trim();
+      interimTranscriptRef.current = interimParts.join(' ').replace(/\\s+/g, ' ').trim();
 
-      finalTranscriptRef.current = finalJoined;
-      interimTranscriptRef.current = interimJoined;
-      hasSpokenRef.current = Boolean(finalJoined || interimJoined);
-
-      const currentText = [finalJoined, interimJoined].filter(Boolean).join(' ');
-      if (onInterimTranscript && currentText) {
-        onInterimTranscript(currentText);
+      const transcript = getTranscript();
+      if (transcript) {
+        onInterimTranscript?.(transcript);
+        setStatus('listening');
+        resetSilenceTimer(sessionId);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
       if (activeSessionIdRef.current !== sessionId) return;
-      clearSilenceTimer();
-      activeSessionIdRef.current = null;
-      setIsListening(false);
 
+      const transcript = getTranscript();
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        activeSessionIdRef.current = null;
+        clearSilenceTimer();
+        setIsListening(false);
+        setIsSessionActive(false);
         setStatus('permission-denied');
-        setAnnouncement('Microphone access denied. Please enable microphone permissions in your browser or type your request.');
-      } else if (event.error === 'no-speech') {
+        setAnnouncement('Microphone access denied. Enable microphone permissions or type your request.');
+        return;
+      }
+
+      if (event.error === 'no-speech' && !transcript) {
+        activeSessionIdRef.current = null;
+        clearSilenceTimer();
+        setIsListening(false);
+        setIsSessionActive(false);
         setStatus('no-speech');
-        setAnnouncement('No speech was detected. Please try speaking again or type your request.');
-      } else if (event.error === 'aborted') {
-        setStatus('interrupted');
-        setAnnouncement('Voice input canceled.');
-      } else {
-        setStatus('failed');
-        setAnnouncement('Voice recognition failed. Please try again or use typed input.');
+        setAnnouncement('No speech was detected. Please try again or type your request.');
+        return;
+      }
+
+      setIsListening(false);
+      setStatus(transcript ? 'interrupted' : 'failed');
+      setAnnouncement(
+        transcript
+          ? 'Speech recognition was interrupted. Your transcript is preserved; press Done to send or Stop & Edit to revise it.'
+          : 'Voice recognition failed. Please try again or type your request.'
+      );
+      if (!transcript) {
+        activeSessionIdRef.current = null;
+        clearSilenceTimer();
+        setIsSessionActive(false);
       }
     };
 
     recognition.onend = () => {
       if (activeSessionIdRef.current !== sessionId) return;
-      clearSilenceTimer();
-      activeSessionIdRef.current = null;
+
+      // Browsers may end recognition after one phrase even while the user is still
+      // thinking. Keep the session and its silence timer alive; never submit here.
       setIsListening(false);
-
-      const transcript = finalTranscriptRef.current.trim() || interimTranscriptRef.current.trim();
-
-      if (!transcript) {
-        if (hasSpokenRef.current) {
-          setStatus('interrupted');
-          setAnnouncement('Speech recognition ended before message was captured.');
-        } else {
-          setStatus('no-speech');
-          setAnnouncement('No speech detected. Microphone stopped.');
-        }
-        return;
-      }
-
-      // Ensure one spoken message produces strictly one AI request
-      if (submittedForSessionRef.current === sessionId) return;
-      submittedForSessionRef.current = sessionId;
-
-      setStatus('success');
-      setAnnouncement(`Voice message received: "${transcript}". Submitting your message to Nexa.`);
-
-      if (onFinalTranscript) {
-        onFinalTranscript(transcript);
-      }
+      const transcript = getTranscript();
+      setStatus(transcript ? 'interrupted' : 'no-speech');
+      setAnnouncement(
+        transcript
+          ? 'Speech capture paused. Your words are preserved. You can continue waiting, press Done, or Stop & Edit.'
+          : 'Microphone paused while waiting for speech. You can try again or cancel.'
+      );
     };
 
     try {
       recognition.start();
       setIsListening(true);
+      setIsSessionActive(true);
       setStatus('listening');
-      setAnnouncement('Microphone active. Listening for your shopping request. Speak clearly now.');
+      setAnnouncement('Microphone active. Speak your shopping request. It will send after five seconds of silence.');
       resetSilenceTimer(sessionId);
     } catch {
       activeSessionIdRef.current = null;
+      clearSilenceTimer();
       setIsListening(false);
+      setIsSessionActive(false);
       setStatus('failed');
-      setAnnouncement('Could not start microphone. Please check permissions or type your request.');
+      setAnnouncement('Could not start microphone. Check browser permissions or type your request.');
     }
   }, [
-    isSupported,
-    speechRecognitionFactory,
-    onInterimTranscript,
-    onFinalTranscript,
-    stopListening,
-    resetSilenceTimer,
     clearSilenceTimer,
+    getTranscript,
+    isSupported,
+    onInterimTranscript,
+    resetSilenceTimer,
+    speechRecognitionFactory,
+    stopListening,
   ]);
 
   return {
     isSupported,
     isListening,
+    isSessionActive,
     status,
     announcement,
     startListening,
