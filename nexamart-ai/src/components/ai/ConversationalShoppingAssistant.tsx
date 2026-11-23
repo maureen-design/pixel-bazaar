@@ -533,7 +533,10 @@ export function ConversationalShoppingAssistant({
                 ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  if (isVoiceSessionActive) stopListening(false);
+                  setInput(e.target.value);
+                }}
                 placeholder={
                   isListening
                     ? 'Listening... Speak now, or click microphone to stop'
