@@ -514,6 +514,7 @@ export function AISearchBar() {
             placeholder={aiMode ? 'Ask AI to find what you need…' : 'Search products by name or type…'}
             value={query}
             onChange={(e) => {
+              if (activeVoiceSessionRef.current !== null) finishListening('edit');
               submittedVoiceQueryRef.current = null;
               setVoiceStatus('idle');
               setQuery(e.target.value);
