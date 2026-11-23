@@ -129,12 +129,14 @@ export function useSpeechSynthesis() {
       utterance.pitch = 1.0;
 
       utterance.onstart = () => {
+        if (currentUtteranceRef.current !== utterance) return;
         setIsSpeaking(true);
         setSpeakingMessageId(messageId);
         setSpeechAnnouncement("Nexa is speaking response aloud. Activate the Stop button to silence.");
       };
 
       utterance.onend = () => {
+        if (currentUtteranceRef.current !== utterance) return;
         setIsSpeaking(false);
         setSpeakingMessageId(null);
         currentUtteranceRef.current = null;
@@ -142,6 +144,7 @@ export function useSpeechSynthesis() {
       };
 
       utterance.onerror = (event) => {
+        if (currentUtteranceRef.current !== utterance) return;
         // 'interrupted' and 'canceled' are expected when stopped by user
         if (event.error !== 'interrupted' && event.error !== 'canceled') {
           setSpeechAnnouncement('Speech playback encountered an error.');
