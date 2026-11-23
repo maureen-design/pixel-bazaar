@@ -355,13 +355,12 @@ export function AISearchBar() {
       // AI-parsed search
       setLoading(true);
       try {
-        const { data, error } = await invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: trimmed });
+        const response = await invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: trimmed });
 
-        if (error) throw error;
-        if (!data?.success || !data.data) throw new Error(data?.error || 'AI search failed');
-
-        if (!data?.success || !data.data) throw new Error(data?.error || 'AI search failed');
-        const filters = data.data;
+        if (!response.success || !response.data) {
+          throw new Error(response.error || 'AI search failed');
+        }
+        const filters = response.data;
         const params = new URLSearchParams();
 
         if (filters.keywords) params.set('q', filters.keywords);
@@ -443,13 +442,13 @@ export function AISearchBar() {
     if (aiMode) {
       // Trigger AI search with the example
       setLoading(true);
-      invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: example }).then(({ data, error }) => {
-        if (error || !data?.success) {
+      invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: example }).then((response) => {
+        if (!response.success || !response.data) {
           toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
           navigate(`/search?q=${encodeURIComponent(example)}`);
           return;
         }
-        const filters = data.data;
+        const filters = response.data;
         const params = new URLSearchParams();
         if (filters.keywords) params.set('q', filters.keywords);
         if (filters.category) params.set('category', filters.category);
