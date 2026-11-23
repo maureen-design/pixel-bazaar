@@ -35,6 +35,17 @@ interface SpeechRecognitionErrorEventLike {
   error: string;
 }
 
+interface ParsedSearchFilters {
+  keywords?: string | null;
+  category?: string | null;
+  productType?: string | null;
+  brand?: string | null;
+  color?: string | null;
+  minPrice?: number | string | null;
+  maxPrice?: number | string | null;
+  sortBy?: string | null;
+}
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -43,6 +54,7 @@ interface SpeechRecognitionLike {
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
   start: () => void;
+  stop: () => void;
   abort: () => void;
 }
 
@@ -126,6 +138,7 @@ export function AISearchBar() {
   const [aiMode, setAiMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
     if (typeof window === 'undefined') return 'idle';
     if (!speechRecognitionFactory) return 'unsupported';
@@ -161,6 +174,7 @@ export function AISearchBar() {
       silenceTimerRef.current = null;
     }
     setIsListening(false);
+    setIsVoiceSessionActive(false);
 
     const transcript = recognizedTranscriptRef.current.trim();
     if (action === 'cancel') {
@@ -237,6 +251,7 @@ export function AISearchBar() {
 
     const recognition = recognitionRef.current;
     activeVoiceSessionRef.current = sessionId;
+    setIsVoiceSessionActive(true);
     recognizedTranscriptRef.current = '';
     submittedVoiceQueryRef.current = null;
     recognition.continuous = true;
@@ -261,7 +276,7 @@ export function AISearchBar() {
 
       const finalTranscript = finalParts.join(' ').replace(/\s+/g, ' ').trim();
       const interimTranscript = interimParts.join(' ').replace(/\s+/g, ' ').trim();
-      const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
+      const visibleTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
       recognizedTranscriptRef.current = visibleTranscript;
       if (visibleTranscript) setQuery(visibleTranscript);
     };
@@ -273,11 +288,13 @@ export function AISearchBar() {
 
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         activeVoiceSessionRef.current = null;
+        setIsVoiceSessionActive(false);
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         setVoiceStatus('permission-denied');
         toast.error('Microphone access denied. Enable it in browser settings or type your search.');
       } else if (event.error === 'no-speech' && !recognizedTranscriptRef.current.trim()) {
         activeVoiceSessionRef.current = null;
+        setIsVoiceSessionActive(false);
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         setVoiceStatus('no-speech');
         toast.info('No speech detected. Try again or type your search.');
@@ -285,6 +302,7 @@ export function AISearchBar() {
         setVoiceStatus('interrupted');
         if (!recognizedTranscriptRef.current.trim()) {
           activeVoiceSessionRef.current = null;
+          setIsVoiceSessionActive(false);
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           toast.error('Voice search was interrupted. Please try again.');
         }
@@ -309,6 +327,7 @@ export function AISearchBar() {
     } catch (error) {
       activeVoiceSessionRef.current = null;
       setIsListening(false);
+      setIsVoiceSessionActive(false);
       console.error('Failed to start speech recognition:', error);
       const denied = error instanceof DOMException && error.name === 'NotAllowedError';
       setVoiceStatus(denied ? 'permission-denied' : 'failed');
@@ -336,18 +355,19 @@ export function AISearchBar() {
       // AI-parsed search
       setLoading(true);
       try {
-        const { data, error } = await invokeAIAssistant('parse_search', { query: trimmed });
+        const { data, error } = await invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: trimmed });
 
         if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'AI search failed');
+        if (!data?.success || !data.data) throw new Error(data?.error || 'AI search failed');
 
+        if (!data?.success || !data.data) throw new Error(data?.error || 'AI search failed');
         const filters = data.data;
         const params = new URLSearchParams();
 
         if (filters.keywords) params.set('q', filters.keywords);
         if (filters.category) params.set('category', filters.category);
 
-        const readCleanString = (v: any, maxLen = 40): string | undefined => {
+        const readCleanString = (v: unknown, maxLen = 40): string | undefined => {
           if (typeof v !== 'string' || v.trim().length === 0 || v.trim().length > maxLen) return undefined;
           return v.trim();
         };
@@ -362,7 +382,7 @@ export function AISearchBar() {
         const color = rawColor ? rawColor.toLowerCase() : undefined;
         if (color && COLOR_VOCAB.includes(color)) params.set('color', color);
 
-        const readPrice = (v: any): number | undefined => {
+        const readPrice = (v: unknown): number | undefined => {
           if (v === null || v === undefined || v === '') return undefined;
           const n = Number(v);
           return Number.isFinite(n) && n >= 0 ? n : undefined;
@@ -387,7 +407,7 @@ export function AISearchBar() {
         }
 
         navigate(`/search?${params.toString()}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isGuestAILimitError(err)) return;
         toast.error('AI search didn’t return results — showing regular search instead.', { description: trimmed });
         navigate(`/search?q=${encodeURIComponent(trimmed)}`);
@@ -423,7 +443,7 @@ export function AISearchBar() {
     if (aiMode) {
       // Trigger AI search with the example
       setLoading(true);
-      invokeAIAssistant('parse_search', { query: example }).then(({ data, error }) => {
+      invokeAIAssistant<ParsedSearchFilters>('parse_search', { query: example }).then(({ data, error }) => {
         if (error || !data?.success) {
           toast.error('AI search didn’t return results — showing regular search instead.', { description: example });
           navigate(`/search?q=${encodeURIComponent(example)}`);
@@ -433,7 +453,7 @@ export function AISearchBar() {
         const params = new URLSearchParams();
         if (filters.keywords) params.set('q', filters.keywords);
         if (filters.category) params.set('category', filters.category);
-        const readCleanString = (v: any, maxLen = 40): string | undefined => {
+        const readCleanString = (v: unknown, maxLen = 40): string | undefined => {
           if (typeof v !== 'string' || v.trim().length === 0 || v.trim().length > maxLen) return undefined;
           return v.trim();
         };
@@ -445,7 +465,7 @@ export function AISearchBar() {
         const rawColor = readCleanString(filters.color, 20);
         const color = rawColor ? rawColor.toLowerCase() : undefined;
         if (color && COLOR_VOCAB.includes(color)) params.set('color', color);
-        const readPrice = (v: any): number | undefined => {
+        const readPrice = (v: unknown): number | undefined => {
           if (v === null || v === undefined || v === '') return undefined;
           const n = Number(v);
           return Number.isFinite(n) && n >= 0 ? n : undefined;
@@ -527,8 +547,8 @@ export function AISearchBar() {
             <button
               type="button"
               onClick={toggleListening}
-              aria-label={activeVoiceSessionRef.current !== null ? 'Stop voice input and keep transcript for editing' : sttSupported ? 'Start voice search' : 'Voice search unavailable'}
-              aria-pressed={activeVoiceSessionRef.current !== null}
+              aria-label={isVoiceSessionActive ? 'Stop voice input and keep transcript for editing' : sttSupported ? 'Start voice search' : 'Voice search unavailable'}
+              aria-pressed={isVoiceSessionActive}
               disabled={!sttSupported || voiceStatus === 'submitting'}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
                 isListening
@@ -563,10 +583,10 @@ export function AISearchBar() {
           </div>
         </div>
       </form>
-      {activeVoiceSessionRef.current !== null && (
+      {isVoiceSessionActive && (
         <div className="mt-2 flex items-center gap-3 text-xs" role="group" aria-label="Voice search controls">
           <span className="text-muted-foreground">{isListening ? 'Listening. Five seconds of silence submits your search.' : 'Recognition paused. Review your transcript.'}</span>
-          <button type="button" onClick={() => finishListening('submit')} disabled={!recognizedTranscriptRef.current.trim()} className="font-semibold underline disabled:opacity-40">Done</button>
+          <button type="button" onClick={() => finishListening('submit')} disabled={!query.trim()} className="font-semibold underline disabled:opacity-40">Done</button>
           <button type="button" onClick={() => finishListening('edit')} className="font-semibold underline">Stop &amp; Edit</button>
           <button type="button" onClick={() => finishListening('cancel')} className="font-semibold underline">Cancel</button>
         </div>
